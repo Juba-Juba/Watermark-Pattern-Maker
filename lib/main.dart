@@ -488,7 +488,7 @@ class _EditorState extends State<Editor> {
     );
     if (!full && MediaQuery.sizeOf(context).width < 850) {
       return SizedBox(
-        height: 174,
+        height: height,
         child: Row(
           children: [
             Expanded(
@@ -499,15 +499,16 @@ class _EditorState extends State<Editor> {
                 children: [
                   title,
                   dimensions,
-                  const SizedBox(height: 6),
-                  previewOptions(refresh),
-                  const SizedBox(height: 4),
-                  note,
+                  if (height >= 140) ...[
+                    const SizedBox(height: 6),
+                    previewOptions(refresh),
+                  ],
+                  if (height >= 170) ...[const SizedBox(height: 4), note],
                 ],
               ),
             ),
             const SizedBox(width: 12),
-            Expanded(flex: 2, child: previewCanvas(166)),
+            Expanded(flex: 2, child: previewCanvas(height)),
           ],
         ),
       );
@@ -977,6 +978,7 @@ class _EditorState extends State<Editor> {
           builder: (context, constraints) {
             final wide = constraints.maxWidth > 850;
             final previewCard = Card(
+              key: const ValueKey('pinned-preview'),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -984,7 +986,7 @@ class _EditorState extends State<Editor> {
                     preview(
                       height: wide
                           ? (constraints.maxHeight - 240).clamp(240, 700)
-                          : (constraints.maxHeight * .23).clamp(90, 180),
+                          : (constraints.maxHeight * .32).clamp(64, 174),
                     ),
                   ],
                 ),
@@ -1012,12 +1014,6 @@ class _EditorState extends State<Editor> {
                     ],
                   ),
                 ),
-              );
-            }
-            if (constraints.maxHeight < 500) {
-              return ListView(
-                padding: const EdgeInsets.all(12),
-                children: [previewCard, controls()],
               );
             }
             return Padding(

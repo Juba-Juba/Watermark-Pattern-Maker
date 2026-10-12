@@ -22,6 +22,37 @@ void main() {
     picture.dispose();
   });
   tearDown(() => logo.dispose());
+  for (final size in [const Size(390, 844), const Size(780, 390)]) {
+    testWidgets('Phone preview stays pinned while controls scroll at $size', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(const WatermarkApp());
+      await tester.pumpAndSettle();
+      final preview = find.byKey(const ValueKey('pinned-preview'));
+      final before = tester.getRect(preview);
+      final scroller = find.byType(SingleChildScrollView).first;
+      final scroll = tester
+          .state<ScrollableState>(
+            find
+                .descendant(of: scroller, matching: find.byType(Scrollable))
+                .first,
+          )
+          .position;
+      await tester.drag(scroller, const Offset(0, -250));
+      await tester.pumpAndSettle();
+      expect(scroll.pixels, greaterThan(0));
+      expect(tester.getRect(preview), before);
+      await tester.tap(find.text('الفريم'));
+      await tester.pumpAndSettle();
+      expect(tester.getRect(preview), before);
+      expect(tester.takeException(), isNull);
+    });
+  }
   testWidgets('Center gap toggle and both controls update live', (
     tester,
   ) async {
