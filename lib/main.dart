@@ -596,6 +596,37 @@ class _EditorState extends State<Editor> {
             s.spacingX = footprint.width * (x / 100 - 1);
             s.spacingY = footprint.height * (y / 100 - 1);
           }, suffix: ' px'),
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('فجوة في المنتصف'),
+            subtitle: const Text(
+              'إخفاء العلامات تدريجيًا في الوسط بخلفية شفافة',
+            ),
+            value: s.centerGap,
+            onChanged: (v) => setState(() => s.centerGap = v),
+          ),
+          if (s.centerGap) ...[
+            slider(
+              'حجم الفجوة',
+              s.gapSize * 100,
+              10,
+              150,
+              (v) => s.gapSize = v / 100,
+              suffix: '%',
+            ),
+            slider(
+              'شفافية الفجوة',
+              s.gapTransparency * 100,
+              0,
+              100,
+              (v) => s.gapTransparency = v / 100,
+              suffix: '%',
+            ),
+            const Text(
+              '100%: وسط شفاف تمامًا · 0%: العلامات ظاهرة بالكامل',
+              style: TextStyle(fontSize: 11),
+            ),
+          ],
           if (logo != null && s.scale > logo!.width)
             const Text(
               'التكبير أكبر من دقة اللوجو الأصلية؛ استخدم PNG أعلى دقة لحدة أفضل.',

@@ -21,6 +21,8 @@ class PatternSettings {
   PatternKind kind = PatternKind.staggered;
   LogoTone tone = LogoTone.original;
   Color color = const Color(0xff91979e);
+  bool centerGap = false;
+  double gapSize = .75, gapTransparency = 1;
   Map<String, dynamic> toJson() => {
     'width': width,
     'height': height,
@@ -37,6 +39,9 @@ class PatternSettings {
     'alternateRotation': alternateRotation,
     'alternateScale': alternateScale,
     'color': color.toARGB32(),
+    'centerGap': centerGap,
+    'gapSize': gapSize,
+    'gapTransparency': gapTransparency,
   };
   static PatternSettings fromJson(Map<String, dynamic> j) {
     final s = PatternSettings();
@@ -70,6 +75,12 @@ class PatternSettings {
       1.5,
     );
     s.color = Color(j['color'] as int);
+    s.centerGap = j['centerGap'] == true;
+    s.gapSize = (j['gapSize'] as num? ?? .75).toDouble().clamp(.1, 1.5);
+    s.gapTransparency = (j['gapTransparency'] as num? ?? 1).toDouble().clamp(
+      0,
+      1,
+    );
     return s;
   }
 }
@@ -105,6 +116,13 @@ class PatternPainter extends CustomPainter {
     canvas.save();
     canvas.clipRect(Offset.zero & size);
     canvas.scale(size.width / s.width, size.height / s.height);
+    final gapActive = s.centerGap && s.gapTransparency > 0;
+    if (gapActive) {
+      canvas.saveLayer(
+        Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
+        Paint(),
+      );
+    }
     final w = s.scale, h = w * logo.height / logo.width;
     final footprint = patternFootprint(s, logo.width / logo.height);
     final dx = footprint.width + math.max(0, s.spacingX),
@@ -181,6 +199,27 @@ class PatternPainter extends CustomPainter {
       if (count >= s.limit) {
         break;
       }
+    }
+    if (gapActive) {
+      // Erase alpha on an isolated layer: never paint an opaque preview color.
+      // Normalized coordinates keep the soft ellipse proportional at every size.
+      canvas.save();
+      canvas.scale(s.width.toDouble(), s.height.toDouble());
+      final mask = Paint()
+        ..blendMode = BlendMode.dstOut
+        ..shader = ui.Gradient.radial(
+          const Offset(.5, .5),
+          s.gapSize / 2,
+          [
+            Color.fromRGBO(255, 255, 255, s.gapTransparency),
+            Color.fromRGBO(255, 255, 255, s.gapTransparency),
+            const Color(0x00ffffff),
+          ],
+          [0, .55, 1],
+        );
+      canvas.drawRect(const Rect.fromLTWH(0, 0, 1, 1), mask);
+      canvas.restore();
+      canvas.restore();
     }
     canvas.restore();
     return count;
