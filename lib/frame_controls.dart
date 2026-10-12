@@ -1,0 +1,368 @@
+import 'dart:math' as math;
+import 'package:flutter/material.dart';
+import 'frame.dart';
+import 'number_slider.dart';
+
+class FrameControls extends StatelessWidget {
+  final FrameSettings settings;
+  final VoidCallback onChanged;
+  final bool hasLogo;
+  const FrameControls({
+    super.key,
+    required this.settings,
+    required this.onChanged,
+    required this.hasLogo,
+  });
+
+  void update(VoidCallback change) {
+    change();
+    onChanged();
+  }
+
+  Widget slider(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> change, {
+    String suffix = 'px',
+  }) => NumberSlider(
+    key: ValueKey('frame-$label'),
+    label: label,
+    value: value,
+    min: min,
+    max: max,
+    suffix: suffix,
+    onChanged: (v) => update(() => change(v)),
+  );
+  Future<void> customSize(BuildContext context) async {
+    final width = TextEditingController(text: '${settings.width}');
+    final height = TextEditingController(text: '${settings.height}');
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setLocal) => AlertDialog(
+          title: const Text('مقاس الفريم بالبكسل'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: width,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'العرض'),
+              ),
+              TextField(
+                controller: height,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'الارتفاع'),
+              ),
+              if (error != null)
+                Text(
+                  error!,
+                  style: TextStyle(color: Theme.of(c).colorScheme.error),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final w = int.tryParse(width.text),
+                    h = int.tryParse(height.text);
+                if (w == null ||
+                    h == null ||
+                    w < 64 ||
+                    h < 64 ||
+                    w > 4096 ||
+                    h > 4096) {
+                  setLocal(() => error = 'اختر أبعادًا من 64 إلى 4096');
+                  return;
+                }
+                update(() {
+                  settings.width = w;
+                  settings.height = h;
+                });
+                Navigator.pop(c);
+              },
+              child: const Text('تطبيق'),
+            ),
+          ],
+        ),
+      ),
+    );
+    // Retain dialog controllers through its closing animation.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    width.dispose();
+    height.dispose();
+  }
+
+  Future<void> customColor(BuildContext context) async {
+    final controller = TextEditingController(
+      text: settings.color
+          .toARGB32()
+          .toRadixString(16)
+          .substring(2)
+          .toUpperCase(),
+    );
+    String? error;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, setLocal) => AlertDialog(
+          title: const Text('لون الفريم'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                maxLength: 7,
+                textDirection: TextDirection.ltr,
+                decoration: const InputDecoration(
+                  labelText: 'HEX',
+                  hintText: '#C8CCD2',
+                ),
+              ),
+              if (error != null) Text(error!),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(c),
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final hex = controller.text.trim().replaceFirst('#', '');
+                final value = RegExp(r'^[0-9a-fA-F]{6}$').hasMatch(hex)
+                    ? int.tryParse(hex, radix: 16)
+                    : null;
+                if (value == null) {
+                  setLocal(() => error = 'اكتب ست خانات للون');
+                  return;
+                }
+                update(() => settings.color = Color(0xff000000 | value));
+                Navigator.pop(c);
+              },
+              child: const Text('تطبيق'),
+            ),
+          ],
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    controller.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final s = settings;
+    Widget card(String title, List<Widget> children) => Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            ...children,
+          ],
+        ),
+      ),
+    );
+    return Column(
+      children: [
+        card('مقاس الفريم', [
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final p in [
+                (1080, 1920, '9:16'),
+                (1440, 1920, '3:4'),
+                (1920, 1920, '1:1'),
+                (1920, 1080, '16:9'),
+              ])
+                ChoiceChip(
+                  label: Text(p.$3),
+                  selected: s.width == p.$1 && s.height == p.$2,
+                  onSelected: (_) => update(() {
+                    s.width = p.$1;
+                    s.height = p.$2;
+                  }),
+                ),
+              ActionChip(
+                label: const Text('مقاس مخصص'),
+                onPressed: () => customSize(context),
+              ),
+              ActionChip(
+                label: const Text('4K'),
+                onPressed: () => update(() {
+                  final factor = 3840 / math.max(s.width, s.height);
+                  s.width = (s.width * factor).round();
+                  s.height = (s.height * factor).round();
+                  s.stroke *= factor;
+                  s.inset *= factor;
+                  s.radius *= factor;
+                  s.gap *= factor;
+                }),
+              ),
+            ],
+          ),
+        ]),
+        card('اختر تصميم الفريم', [
+          LayoutBuilder(
+            builder: (context, constraints) => Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final style in FrameStyle.values)
+                  SizedBox(
+                    width: (constraints.maxWidth - 16) / 3,
+                    child: Semantics(
+                      button: true,
+                      selected: s.style == style,
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(12),
+                        onTap: () => update(() => s.style = style),
+                        child: Container(
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: s.style == style
+                                  ? Theme.of(context).colorScheme.primary
+                                  : Theme.of(context).dividerColor,
+                              width: s.style == style ? 2 : 1,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            children: [
+                              SizedBox(
+                                height: 78,
+                                child: CustomPaint(
+                                  size: const Size(110, 78),
+                                  painter: FramePainter(
+                                    FrameSettings()
+                                      ..width = 240
+                                      ..height = 300
+                                      ..style = style
+                                      ..inset = 24
+                                      ..stroke = 3
+                                      ..radius = 12
+                                      ..color = s.color,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                frameStyleNames[style.index],
+                                style: const TextStyle(fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final color in [
+                (const Color(0xffc8ccd2), 'فضي'),
+                (const Color(0xffc5a35b), 'ذهبي'),
+                (Colors.white, 'أبيض'),
+                (const Color(0xff3d444c), 'رصاصي'),
+                (Colors.black, 'أسود'),
+              ])
+                ChoiceChip(
+                  avatar: CircleAvatar(backgroundColor: color.$1, radius: 7),
+                  label: Text(color.$2),
+                  selected: s.color == color.$1,
+                  onSelected: (_) => update(() => s.color = color.$1),
+                ),
+              ActionChip(
+                label: const Text('لون مخصص'),
+                onPressed: () => customColor(context),
+              ),
+            ],
+          ),
+        ]),
+        card('اللوجو داخل الفريم', [
+          if (!hasLogo)
+            const Text(
+              'استورد لوجو PNG من الزر أعلى الإعدادات. يظهر بألوانه الأصلية في فتحة شفافة من الفريم.',
+            ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('إظهار اللوجو وفتح الفريم'),
+            value: s.showLogo,
+            onChanged: hasLogo ? (v) => update(() => s.showLogo = v) : null,
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final position in FramePosition.values)
+                ChoiceChip(
+                  label: Text(
+                    framePositionNames[position.index],
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  selected: s.position == position,
+                  onSelected: (_) => update(() => s.position = position),
+                ),
+            ],
+          ),
+          slider(
+            'حجم اللوجو في الفريم',
+            s.logoWidth * 100,
+            8,
+            60,
+            (v) => s.logoWidth = v / 100,
+            suffix: '%',
+          ),
+          slider('فراغ حول اللوجو', s.gap, 0, 120, (v) => s.gap = v),
+          slider(
+            'ظهور اللوجو',
+            s.logoOpacity * 100,
+            0,
+            100,
+            (v) => s.logoOpacity = v / 100,
+            suffix: '%',
+          ),
+        ]),
+        card('ضبط الفريم', [
+          slider('سمك الفريم', s.stroke, 1, 40, (v) => s.stroke = v),
+          slider(
+            'بعد الفريم عن الحافة',
+            s.inset,
+            8,
+            math.min(s.width, s.height) * .24,
+            (v) => s.inset = v,
+          ),
+          slider('استدارة الأركان', s.radius, 0, 200, (v) => s.radius = v),
+          slider(
+            'ظهور الفريم',
+            s.opacity * 100,
+            0,
+            100,
+            (v) => s.opacity = v / 100,
+            suffix: '%',
+          ),
+          const Text(
+            'المنتصف ومساحة اللوجو شفافان في PNG. يمكنك تصدير الفريم وحده أيضًا.',
+            style: TextStyle(fontSize: 12),
+          ),
+        ]),
+      ],
+    );
+  }
+}

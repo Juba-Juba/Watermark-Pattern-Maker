@@ -1,0 +1,285 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:flutter/material.dart';
+
+enum FrameStyle { minimal, doubleLine, gallery, corners, ornamental, artDeco }
+
+enum FramePosition {
+  topLeft,
+  top,
+  topRight,
+  left,
+  right,
+  bottomLeft,
+  bottom,
+  bottomRight,
+}
+
+const frameStyleNames = [
+  'ناعم',
+  'مزدوج',
+  'جاليري',
+  'أركان',
+  'كلاسيك',
+  'آرت ديكو',
+];
+const framePositionNames = [
+  'أعلى يسار',
+  'أعلى الوسط',
+  'أعلى يمين',
+  'يسار الوسط',
+  'يمين الوسط',
+  'أسفل يسار',
+  'أسفل الوسط',
+  'أسفل يمين',
+];
+
+class FrameSettings {
+  int width = 1080, height = 1920;
+  FrameStyle style = FrameStyle.doubleLine;
+  FramePosition position = FramePosition.bottom;
+  Color color = const Color(0xffc8ccd2);
+  double stroke = 5,
+      inset = 64,
+      radius = 32,
+      gap = 18,
+      logoWidth = .28,
+      opacity = 1,
+      logoOpacity = 1;
+  bool showLogo = true;
+}
+
+class FrameLayout {
+  final Rect border, logoRect, gapRect;
+  final double stroke, radius;
+  FrameLayout(
+    this.border,
+    this.logoRect,
+    this.gapRect,
+    this.stroke,
+    this.radius,
+  );
+  factory FrameLayout.calculate(FrameSettings s, double? aspect) {
+    final shortest = math.min(s.width, s.height).toDouble();
+    final inset = s.inset.clamp(8.0, shortest * .24);
+    final stroke = s.stroke.clamp(1.0, inset / 2);
+    final border = Rect.fromLTRB(
+      inset,
+      inset,
+      s.width - inset,
+      s.height - inset,
+    );
+    final w = math.min(s.width * s.logoWidth, border.width * .72);
+    final h = math.min(w / (aspect ?? 2), border.height * .24);
+    final actualW = math.min(w, h * (aspect ?? 2));
+    final cornerOffset = math.min(
+      border.width * .25,
+      math.max(actualW / 2 + s.gap, s.radius),
+    );
+    final center = switch (s.position) {
+      FramePosition.topLeft => Offset(border.left + cornerOffset, border.top),
+      FramePosition.top => border.topCenter,
+      FramePosition.topRight => Offset(border.right - cornerOffset, border.top),
+      FramePosition.left => border.centerLeft,
+      FramePosition.right => border.centerRight,
+      FramePosition.bottomLeft => Offset(
+        border.left + cornerOffset,
+        border.bottom,
+      ),
+      FramePosition.bottom => border.bottomCenter,
+      FramePosition.bottomRight => Offset(
+        border.right - cornerOffset,
+        border.bottom,
+      ),
+    };
+    // Fit into the canvas without stretching or cropping any logo pixels.
+    final maxW = 2 * math.min(center.dx, s.width - center.dx);
+    final maxH = 2 * math.min(center.dy, s.height - center.dy);
+    final fit = math.min(1.0, math.min(maxW / actualW, maxH / h));
+    final logo = Rect.fromCenter(
+      center: center,
+      width: actualW * fit,
+      height: h * fit,
+    );
+    return FrameLayout(
+      border,
+      logo,
+      logo.inflate(s.gap),
+      stroke,
+      s.radius.clamp(0.0, border.shortestSide / 3),
+    );
+  }
+}
+
+class FramePainter extends CustomPainter {
+  final FrameSettings settings;
+  final ui.Image? logo;
+  FramePainter(this.settings, {this.logo});
+  @override
+  void paint(Canvas canvas, Size size) {
+    final s = settings;
+    final layout = FrameLayout.calculate(
+      s,
+      logo == null ? null : logo!.width / logo!.height,
+    );
+    final r = layout.border;
+    final paint = Paint()
+      ..color = s.color.withValues(alpha: s.opacity)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = layout.stroke
+      ..isAntiAlias = true;
+    canvas.save();
+    canvas.scale(size.width / s.width, size.height / s.height);
+    canvas.clipRect(
+      Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
+    );
+    canvas.save();
+    if (logo != null && s.showLogo) {
+      final allowed = Path.combine(
+        PathOperation.difference,
+        Path()..addRect(
+          Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
+        ),
+        Path()..addRRect(
+          RRect.fromRectAndRadius(layout.gapRect, const Radius.circular(8)),
+        ),
+      );
+      canvas.clipPath(allowed);
+    }
+    void outline(Rect rect, double radius) => canvas.drawRRect(
+      RRect.fromRectAndRadius(rect, Radius.circular(radius)),
+      paint,
+    );
+    final separation = math.max(
+      layout.stroke * 3,
+      math.min(r.width, r.height) * .012,
+    );
+    switch (s.style) {
+      case FrameStyle.minimal:
+        outline(r, layout.radius);
+      case FrameStyle.doubleLine:
+        outline(r, layout.radius);
+        paint.strokeWidth = math.max(1, layout.stroke * .45);
+        outline(r.deflate(separation), math.max(0, layout.radius - separation));
+      case FrameStyle.gallery:
+        paint.strokeWidth = layout.stroke * 2;
+        outline(r, 0);
+        paint.strokeWidth = math.max(1, layout.stroke * .35);
+        outline(r.deflate(separation * 1.6), 0);
+      case FrameStyle.corners:
+        outline(r, layout.radius);
+        paint.strokeWidth = layout.stroke * 2;
+        final length = r.shortestSide * .14;
+        for (final corner in [
+          r.topLeft,
+          r.topRight,
+          r.bottomLeft,
+          r.bottomRight,
+        ]) {
+          final sx = corner.dx == r.left ? 1.0 : -1.0,
+              sy = corner.dy == r.top ? 1.0 : -1.0;
+          canvas.drawPath(
+            Path()
+              ..moveTo(corner.dx + sx * length, corner.dy + sy * separation)
+              ..lineTo(corner.dx + sx * separation, corner.dy + sy * separation)
+              ..lineTo(corner.dx + sx * separation, corner.dy + sy * length),
+            paint,
+          );
+        }
+      case FrameStyle.ornamental:
+        outline(r, layout.radius);
+        paint.strokeWidth = math.max(1, layout.stroke * .45);
+        outline(r.deflate(separation), math.max(0, layout.radius - separation));
+        for (final corner in [
+          r.topLeft,
+          r.topRight,
+          r.bottomLeft,
+          r.bottomRight,
+        ]) {
+          final sx = corner.dx == r.left ? 1.0 : -1.0,
+              sy = corner.dy == r.top ? 1.0 : -1.0;
+          final length = r.shortestSide * .09;
+          final c = corner + Offset(sx * length, sy * length);
+          canvas.drawOval(
+            Rect.fromCenter(center: c, width: length, height: length),
+            paint,
+          );
+          canvas.drawPath(
+            Path()
+              ..moveTo(c.dx - sx * length * .8, c.dy)
+              ..quadraticBezierTo(
+                c.dx,
+                c.dy - sy * length * .8,
+                c.dx + sx * length * .8,
+                c.dy,
+              )
+              ..quadraticBezierTo(
+                c.dx,
+                c.dy + sy * length * .8,
+                c.dx,
+                c.dy + sy * length * .8,
+              ),
+            paint,
+          );
+        }
+      case FrameStyle.artDeco:
+        outline(r, 0);
+        paint.strokeWidth = math.max(1, layout.stroke * .5);
+        outline(r.deflate(separation * 2), 0);
+        for (final corner in [
+          r.topLeft,
+          r.topRight,
+          r.bottomLeft,
+          r.bottomRight,
+        ]) {
+          final sx = corner.dx == r.left ? 1.0 : -1.0,
+              sy = corner.dy == r.top ? 1.0 : -1.0;
+          final length = r.shortestSide * .12;
+          canvas.drawPath(
+            Path()
+              ..moveTo(corner.dx + sx * length, corner.dy)
+              ..lineTo(corner.dx + sx * length, corner.dy + sy * separation)
+              ..lineTo(corner.dx + sx * separation, corner.dy + sy * separation)
+              ..lineTo(corner.dx + sx * separation, corner.dy + sy * length)
+              ..lineTo(corner.dx, corner.dy + sy * length),
+            paint,
+          );
+        }
+    }
+    canvas.restore();
+    if (logo != null && s.showLogo) {
+      canvas.drawImageRect(
+        logo!,
+        Rect.fromLTWH(0, 0, logo!.width.toDouble(), logo!.height.toDouble()),
+        layout.logoRect,
+        Paint()
+          ..filterQuality = FilterQuality.high
+          ..isAntiAlias = true
+          ..color = Color.fromRGBO(255, 255, 255, s.logoOpacity),
+      );
+    }
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant FramePainter oldDelegate) => true;
+}
+
+Future<Uint8List> exportFrame(FrameSettings settings, {ui.Image? logo}) async {
+  final recorder = ui.PictureRecorder();
+  FramePainter(settings, logo: logo).paint(
+    Canvas(recorder),
+    Size(settings.width.toDouble(), settings.height.toDouble()),
+  );
+  final picture = recorder.endRecording();
+  final output = await picture.toImage(settings.width, settings.height);
+  try {
+    final data = await output.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) throw StateError('تعذر تصدير الفريم');
+    return data.buffer.asUint8List();
+  } finally {
+    output.dispose();
+    picture.dispose();
+  }
+}

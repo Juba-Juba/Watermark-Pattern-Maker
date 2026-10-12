@@ -11,6 +11,8 @@ import 'image_processing.dart';
 import 'pattern.dart';
 import 'save_file.dart';
 import 'number_slider.dart';
+import 'frame.dart';
+import 'frame_controls.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -71,7 +73,11 @@ class _EditorState extends State<Editor> {
   ui.Image? logo, background;
   final picker = ImagePicker();
   bool busy = false;
-  int backdrop = 0, editorTab = 0;
+  int backdrop = 0;
+  bool frameMode = false;
+  final frame = FrameSettings();
+  int get canvasWidth => frameMode ? frame.width : s.width;
+  int get canvasHeight => frameMode ? frame.height : s.height;
   bool linkSpacing = false;
   String? filename;
   Map<String, dynamic> presets = {};
@@ -157,7 +163,12 @@ class _EditorState extends State<Editor> {
       return;
     }
     final aspect = logo!.width / logo!.height;
-    s.scale = math.min(s.width / 4.4, s.height / 6 * aspect).clamp(24, 800);
+    s.scale = math
+        .min(
+          logo!.width.toDouble(),
+          math.min(s.width / 4.4, s.height / 6 * aspect),
+        )
+        .clamp(24, 800);
     s.spacingX = (s.scale * .7).clamp(0, 600);
     s.spacingY = (s.scale / aspect * .8).clamp(0, 600);
     s.limit = 1000;
@@ -188,13 +199,15 @@ class _EditorState extends State<Editor> {
     }
   });
   Future<void> export() => task(() async {
-    if (logo == null) {
+    if (!frameMode && logo == null) {
       return;
     }
-    final bytes = await exportPattern(logo!, s);
+    final bytes = frameMode
+        ? await exportFrame(frame, logo: logo)
+        : await exportPattern(logo!, s);
     final saved = await savePng(
       bytes,
-      'watermark_${s.width}x${s.height}_${DateTime.now().millisecondsSinceEpoch}.png',
+      '${frameMode ? 'frame' : 'watermark'}_${canvasWidth}x${canvasHeight}_${DateTime.now().millisecondsSinceEpoch}.png',
     );
     if (saved) {
       message('تم تصدير PNG بخلفية شفافة');
@@ -325,41 +338,49 @@ class _EditorState extends State<Editor> {
   );
   double get logoHeight =>
       s.scale * (logo == null ? 1 : logo!.height / logo!.width);
-  double get spacingPercentX => (1 + s.spacingX / s.scale) * 100;
-  double get spacingPercentY => (1 + s.spacingY / logoHeight) * 100;
+  Size get footprint =>
+      patternFootprint(s, logo == null ? 1 : logo!.width / logo!.height);
+  double get spacingPercentX => (1 + s.spacingX / footprint.width) * 100;
+  double get spacingPercentY => (1 + s.spacingY / footprint.height) * 100;
   void setSpacing(double value, {required bool horizontal}) {
     if (horizontal || linkSpacing) {
-      s.spacingX = s.scale * (value / 100 - 1);
+      s.spacingX = footprint.width * (value / 100 - 1);
     }
     if (!horizontal || linkSpacing) {
-      s.spacingY = logoHeight * (value / 100 - 1);
+      s.spacingY = footprint.height * (value / 100 - 1);
     }
   }
 
-  Widget section(String title, List<Widget> children) => Card(
-    margin: const EdgeInsets.only(bottom: 14),
-    child: Padding(
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 16),
-          ...children,
-        ],
-      ),
-    ),
-  );
+  Widget section(String title, List<Widget> children) {
+    final expanded = title == 'عناصر Pattern';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: expanded
+          ? Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 12),
+                  ...children,
+                ],
+              ),
+            )
+          : ExpansionTile(
+              key: PageStorageKey(title),
+              title: Text(title == 'إعداداتك المحفوظة' ? 'المحفوظات' : title),
+              childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              children: children,
+            ),
+    );
+  }
+
   Widget previewCanvas(double height) => SizedBox(
     height: height,
     child: Center(
       child: AspectRatio(
-        aspectRatio: s.width / s.height,
+        aspectRatio: canvasWidth / canvasHeight,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
           child: Stack(
@@ -371,7 +392,9 @@ class _EditorState extends State<Editor> {
                 ColoredBox(color: backdrop == 1 ? Colors.black : Colors.white),
               if (backdrop == 3 && background != null)
                 RawImage(image: background, fit: BoxFit.cover),
-              if (logo != null)
+              if (frameMode)
+                CustomPaint(painter: FramePainter(frame, logo: logo))
+              else if (logo != null)
                 CustomPaint(painter: PatternPainter(logo!, s))
               else
                 Center(
@@ -451,7 +474,7 @@ class _EditorState extends State<Editor> {
     VoidCallback? refresh,
   }) {
     final dimensions = Text(
-      '${s.width} × ${s.height}',
+      '$canvasWidth × $canvasHeight',
       textDirection: TextDirection.ltr,
       style: Theme.of(context).textTheme.bodySmall,
     );
@@ -500,7 +523,17 @@ class _EditorState extends State<Editor> {
           ],
         ),
         const SizedBox(height: 12),
-        previewCanvas(full ? MediaQuery.sizeOf(context).height * .65 : height),
+        if (full)
+          SizedBox(
+            height: MediaQuery.sizeOf(context).height * .65,
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 8,
+              child: previewCanvas(MediaQuery.sizeOf(context).height * .65),
+            ),
+          )
+        else
+          previewCanvas(height),
         const SizedBox(height: 12),
         previewOptions(refresh),
         const SizedBox(height: 8),
@@ -528,83 +561,13 @@ class _EditorState extends State<Editor> {
           ),
         ],
       ),
-      SizedBox(
-        width: double.infinity,
-        child: SegmentedButton<int>(
-          showSelectedIcon: false,
-          style: const ButtonStyle(visualDensity: VisualDensity.compact),
-          segments: const [
-            ButtonSegment(value: 0, label: Text('النمط')),
-            ButtonSegment(value: 1, label: Text('الشعار')),
-            ButtonSegment(value: 2, label: Text('المقاس')),
-            ButtonSegment(value: 3, label: Text('المحفوظات')),
-          ],
-          selected: {editorTab},
-          onSelectionChanged: (v) => setState(() => editorTab = v.first),
+      if (frameMode)
+        FrameControls(
+          settings: frame,
+          hasLogo: logo != null,
+          onChanged: () => setState(() {}),
         ),
-      ),
-      const SizedBox(height: 12),
-      if (editorTab == 1)
-        section('الشعار واللون', [
-          FilledButton.icon(
-            onPressed: busy ? null : () => pick(),
-            icon: const Icon(Icons.add_photo_alternate_outlined),
-            label: const Text('تغيير الشعار'),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            filename ?? 'PNG • JPG • WebP',
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'نحافظ على الصورة كما هي. استخدم PNG شفاف لنتيجة Overlay جاهزة.',
-            style: TextStyle(fontSize: 12),
-          ),
-          OutlinedButton.icon(
-            onPressed: logo == null || busy ? null : () => setState(autoFit),
-            icon: const Icon(Icons.auto_fix_high),
-            label: const Text('ضبط الحجم والمسافات تلقائيًا'),
-          ),
-        ]),
-      if (editorTab == 2)
-        section('مساحة التصميم', [
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final p in [
-                (1080, 1920, '9:16'),
-                (1440, 1920, '3:4'),
-                (1920, 1920, '1:1'),
-                (1920, 1080, '16:9'),
-              ])
-                ChoiceChip(
-                  label: Text(p.$3),
-                  selected: s.width * p.$2 == s.height * p.$1,
-                  onSelected: (_) => setState(() {
-                    s.width = p.$1;
-                    s.height = p.$2;
-                    autoFit();
-                  }),
-                ),
-              ActionChip(label: const Text('مخصص'), onPressed: customSize),
-            ],
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: () => setState(() {
-              final factor = 3840 / math.max(s.width, s.height);
-              s.width = (s.width * factor).round();
-              s.height = (s.height * factor).round();
-              autoFit();
-            }),
-            child: const Text('رفع الدقة إلى 4K'),
-          ),
-        ]),
-      if (editorTab == 0)
+      if (!frameMode) ...[
         section('عناصر Pattern', [
           SegmentedButton<PatternKind>(
             segments: const [
@@ -630,13 +593,18 @@ class _EditorState extends State<Editor> {
           slider('حجم الشعار', s.scale, 24, 800, (v) {
             final x = spacingPercentX, y = spacingPercentY;
             s.scale = v;
-            s.spacingX = s.scale * (x / 100 - 1);
-            s.spacingY = logoHeight * (y / 100 - 1);
+            s.spacingX = footprint.width * (x / 100 - 1);
+            s.spacingY = footprint.height * (y / 100 - 1);
           }, suffix: ' px'),
+          if (logo != null && s.scale > logo!.width)
+            const Text(
+              'التكبير أكبر من دقة اللوجو الأصلية؛ استخدم PNG أعلى دقة لحدة أفضل.',
+              style: TextStyle(fontSize: 11),
+            ),
           slider(
             'المسافة الأفقية · الأعمدة',
             spacingPercentX,
-            25,
+            100,
             500,
             (v) => setSpacing(v, horizontal: true),
             suffix: '%',
@@ -644,7 +612,7 @@ class _EditorState extends State<Editor> {
           slider(
             'المسافة الرأسية · الصفوف',
             spacingPercentY,
-            25,
+            100,
             500,
             (v) => setSpacing(v, horizontal: false),
             suffix: '%',
@@ -665,15 +633,15 @@ class _EditorState extends State<Editor> {
               ),
               TextButton(
                 onPressed: () => setState(() {
-                  s.spacingX = s.scale * .5;
-                  s.spacingY = logoHeight * .5;
+                  s.spacingX = footprint.width * .5;
+                  s.spacingY = footprint.height * .5;
                 }),
                 child: const Text('إعادة 150%'),
               ),
             ],
           ),
           const Text(
-            '100% تلامس • أقل تداخل • أكبر تباعد',
+            'المسافات محسوبة بعد الميل لمنع تداخل الشعارات',
             style: TextStyle(fontSize: 11),
           ),
           slider(
@@ -716,14 +684,37 @@ class _EditorState extends State<Editor> {
             ],
           ),
         ]),
-      if (editorTab == 1)
+        section('الشعار واللون', [
+          FilledButton.icon(
+            onPressed: busy ? null : () => pick(),
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: const Text('تغيير الشعار'),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            filename ?? 'PNG • JPG • WebP',
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'نحافظ على الصورة كما هي. استخدم PNG شفاف لنتيجة Overlay جاهزة.',
+            style: TextStyle(fontSize: 12),
+          ),
+          OutlinedButton.icon(
+            onPressed: logo == null || busy ? null : () => setState(autoFit),
+            icon: const Icon(Icons.auto_fix_high),
+            label: const Text('ضبط الحجم والمسافات تلقائيًا'),
+          ),
+        ]),
         section('لون الشعار', [
           Wrap(
             spacing: 8,
             children: [
               for (final t in [
                 (LogoTone.original, 'الأصلي'),
-                (LogoTone.gray, 'رصاصي متدرج'),
+                (LogoTone.gray, 'رصاصي بتفاصيل الأصل'),
                 (LogoTone.custom, 'مخصص'),
               ])
                 ChoiceChip(
@@ -780,7 +771,40 @@ class _EditorState extends State<Editor> {
             ),
           ],
         ]),
-      if (editorTab == 3)
+        section('مساحة التصميم', [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final p in [
+                (1080, 1920, '9:16'),
+                (1440, 1920, '3:4'),
+                (1920, 1920, '1:1'),
+                (1920, 1080, '16:9'),
+              ])
+                ChoiceChip(
+                  label: Text(p.$3),
+                  selected: s.width * p.$2 == s.height * p.$1,
+                  onSelected: (_) => setState(() {
+                    s.width = p.$1;
+                    s.height = p.$2;
+                    autoFit();
+                  }),
+                ),
+              ActionChip(label: const Text('مخصص'), onPressed: customSize),
+            ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => setState(() {
+              final factor = 3840 / math.max(s.width, s.height);
+              s.width = (s.width * factor).round();
+              s.height = (s.height * factor).round();
+              autoFit();
+            }),
+            child: const Text('رفع الدقة إلى 4K'),
+          ),
+        ]),
         section('إعداداتك المحفوظة', [
           if (presets.isNotEmpty)
             DropdownButton<String>(
@@ -832,11 +856,38 @@ class _EditorState extends State<Editor> {
               child: const Text('حذف الإعداد المحدد'),
             ),
         ]),
+      ],
     ],
   );
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
+      bottom: PreferredSize(
+        preferredSize: const Size.fromHeight(52),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: SizedBox(
+            width: double.infinity,
+            child: SegmentedButton<bool>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment(
+                  value: false,
+                  icon: Icon(Icons.texture),
+                  label: Text('العلامة المائية'),
+                ),
+                ButtonSegment(
+                  value: true,
+                  icon: Icon(Icons.crop_square),
+                  label: Text('الفريم'),
+                ),
+              ],
+              selected: {frameMode},
+              onSelectionChanged: (v) => setState(() => frameMode = v.first),
+            ),
+          ),
+        ),
+      ),
       title: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -878,7 +929,7 @@ class _EditorState extends State<Editor> {
           onPressed: () => showAboutDialog(
             context: context,
             applicationName: 'Watermark Pattern Maker',
-            applicationVersion: '1.1.0',
+            applicationVersion: '1.2.0',
             applicationLegalese: 'Juba Tech • معالجة محلية وتصدير PNG شفاف',
           ),
         ),
@@ -893,7 +944,7 @@ class _EditorState extends State<Editor> {
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
         child: FilledButton.icon(
-          onPressed: logo == null || busy ? null : export,
+          onPressed: (!frameMode && logo == null) || busy ? null : export,
           icon: busy
               ? const SizedBox.square(
                   dimension: 18,
@@ -905,7 +956,7 @@ class _EditorState extends State<Editor> {
             child: Text(
               busy
                   ? 'جاري المعالجة…'
-                  : 'تصدير PNG شفاف  •  ${s.width} × ${s.height}',
+                  : 'تصدير ${frameMode ? 'فريم' : 'PNG'} شفاف  •  $canvasWidth × $canvasHeight',
             ),
           ),
         ),

@@ -93,7 +93,7 @@ void main() {
           .map((w) => w.painter)
           .whereType<PatternPainter>()
           .first;
-      expect(pattern.settings.scale, closeTo(245.45, .1));
+      expect(pattern.settings.scale, 40);
       await tester.runAsync(() async {
         await tester.tap(find.textContaining('تصدير PNG شفاف'));
         for (var i = 0; i < 30 && exported == null; i++) {
@@ -104,6 +104,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(exported, isNotNull);
       expect(img.decodePng(exported!)!.any((p) => p.a == 0), true);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('المحفوظات')),
+        alignment: .3,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('المحفوظات'));
       await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
@@ -113,7 +118,7 @@ void main() {
       );
       await tester.tap(find.text('حفظ إعدادات'));
       await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'اختبار الشعار');
+      await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'اختبار الشعار');
       await tester.tap(find.text('حفظ'));
       await tester.pumpAndSettle();
       final prefs = await SharedPreferences.getInstance();
@@ -189,7 +194,7 @@ void main() {
     final settings = PatternSettings()
       ..alternateRotation = 90
       ..alternateScale = .6
-      ..spacingX = -40;
+      ..spacingX = 40;
     expect(
       PatternSettings.fromJson(settings.toJson()).toJson(),
       settings.toJson(),
@@ -226,21 +231,27 @@ void main() {
         '250',
       );
       await tester.pump();
-      expect(current().spacingX, closeTo(current().scale * 1.5, .01));
+      expect(
+        current().spacingX,
+        closeTo(patternFootprint(current(), 1).width * 1.5, .01),
+      );
       expect(current().spacingY, initialY);
       await tester.enterText(
         find.byKey(const ValueKey('number-المسافة الرأسية · الصفوف')),
-        '75',
+        '175',
       );
       await tester.pump();
-      expect(current().spacingY, closeTo(-current().scale * .25, .01));
+      expect(
+        current().spacingY,
+        closeTo(patternFootprint(current(), 1).height * .75, .01),
+      );
       await tester.enterText(
         find.byKey(const ValueKey('number-الشفافية')),
         '18',
       );
       await tester.pump();
       expect(current().opacity, .18);
-      expect(current().tone, LogoTone.gray);
+      expect(current().tone, LogoTone.original);
       expect(find.text('بمبي'), findsNothing);
       expect(tester.takeException(), isNull);
     },
@@ -386,6 +397,11 @@ void main() {
       await tester.tap(find.byTooltip('تبديل المظهر'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('المحفوظات')),
+        alignment: .3,
+      );
+      await tester.pumpAndSettle();
       await tester.tap(find.text('المحفوظات'));
       await tester.pumpAndSettle();
       final buttons = find.text('حفظ إعدادات');
@@ -409,9 +425,11 @@ void main() {
     await tester.pumpWidget(const WatermarkApp());
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    await tester.scrollUntilVisible(find.text('المحفوظات'), 100, scrollable: find.byType(Scrollable).first);
+    await tester.pumpAndSettle();
     await Scrollable.ensureVisible(
       tester.element(find.text('المحفوظات')),
-      alignment: .4,
+      alignment: .3,
     );
     await tester.pumpAndSettle();
     await tester.tap(find.text('المحفوظات'));

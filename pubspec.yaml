@@ -1,7 +1,7 @@
 name: watermark_pattern_maker
 description: Offline Arabic watermark pattern editor with true alpha PNG export.
 publish_to: 'none'
-version: 1.1.0+2
+version: 1.2.0+3
 environment:
   sdk: '>=3.10.0 <4.0.0'
 dependencies:
