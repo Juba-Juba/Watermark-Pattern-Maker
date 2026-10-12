@@ -12,7 +12,9 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  for (final style in FrameStyle.values) {
+  for (final style in FrameStyle.values.where(
+    (s) => s != FrameStyle.logoRepeat,
+  )) {
     test(
       'Frame ${style.name}: real alpha gap and original logo colors',
       () async {
@@ -61,6 +63,83 @@ void main() {
       },
     );
   }
+  test(
+    'Logo border points inward on every edge, preserves RGB and alpha',
+    () async {
+      final source = img.Image(width: 40, height: 20, numChannels: 4);
+      for (var y = 0; y < 20; y++) {
+        for (var x = 0; x < 40; x++) {
+          source.setPixelRgba(
+            x,
+            y,
+            y < 10 ? 230 : 20,
+            50,
+            y < 10 ? 20 : 230,
+            255,
+          );
+        }
+      }
+      final codec = await ui.instantiateImageCodec(img.encodePng(source));
+      final logo = (await codec.getNextFrame()).image;
+      final s = FrameSettings()
+        ..style = FrameStyle.logoRepeat
+        ..width = 320
+        ..height = 400
+        ..inset = 24
+        ..repeatScale = .125
+        ..opacity = .5;
+      final output = img.decodePng(await exportFrame(s, logo: logo))!;
+      expect(output.numChannels, 4);
+      expect(output.getPixel(160, 200).a, 0);
+      expect(output.getPixel(0, 0).a, 0);
+      // Red is the top of the source logo and must face the canvas center.
+      for (final point in [(64, 38), (64, 361), (38, 64), (281, 64)]) {
+        final p = output.getPixel(point.$1, point.$2);
+        expect(p.r, closeTo(230, 2));
+        expect(p.b, closeTo(20, 2));
+        expect(p.a, closeTo(128, 1));
+      }
+      for (final p in output) {
+        expect(
+          p.a,
+          lessThanOrEqualTo(128),
+          reason: 'Perpendicular runs do not overlap',
+        );
+      }
+      int runs(img.Image image) {
+        var count = 0, previous = false;
+        for (var x = 0; x < image.width; x++) {
+          final visible = image.getPixel(x, 34).a > 0;
+          if (visible && !previous) count++;
+          previous = visible;
+        }
+        return count;
+      }
+
+      s.repeatSpacing = .15;
+      final spaced = img.decodePng(await exportFrame(s, logo: logo))!;
+      expect(runs(spaced), lessThan(runs(output)));
+      s.repeatScale = .25;
+      s.inset = 76;
+      final extreme = img.decodePng(await exportFrame(s, logo: logo))!;
+      expect(extreme.any((p) => p.a > 0), isTrue);
+      expect(extreme.getPixel(160, 200).a, 0);
+      Directory('output/qa').createSync(recursive: true);
+      File(
+        'output/qa/logo-repeat-frame.png',
+      ).writeAsBytesSync(img.encodePng(output));
+      logo.dispose();
+      codec.dispose();
+    },
+  );
+  test(
+    'Logo border without an imported logo stays completely transparent',
+    () async {
+      final s = FrameSettings()..style = FrameStyle.logoRepeat;
+      final output = img.decodePng(await exportFrame(s))!;
+      expect(output.every((p) => p.a == 0), isTrue);
+    },
+  );
   test(
     'Opposite corner frames leave the other two corners and middle empty',
     () async {

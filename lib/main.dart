@@ -199,7 +199,7 @@ class _EditorState extends State<Editor> {
     }
   });
   Future<void> export() => task(() async {
-    if (!frameMode && logo == null) {
+    if ((!frameMode || frame.style == FrameStyle.logoRepeat) && logo == null) {
       return;
     }
     final bytes = frameMode
@@ -566,6 +566,7 @@ class _EditorState extends State<Editor> {
         FrameControls(
           settings: frame,
           hasLogo: logo != null,
+          logo: logo,
           onChanged: () => setState(() {}),
         ),
       if (!frameMode) ...[
@@ -903,7 +904,7 @@ class _EditorState extends State<Editor> {
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
             ),
             Text(
-              'WEB • 1.4.0',
+              'WEB • 1.5.0',
               style: TextStyle(fontSize: 10, letterSpacing: 2),
             ),
           ],
@@ -954,7 +955,12 @@ class _EditorState extends State<Editor> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
           child: FilledButton.icon(
-            onPressed: (!frameMode && logo == null) || busy ? null : export,
+            onPressed:
+                ((!frameMode || frame.style == FrameStyle.logoRepeat) &&
+                        logo == null) ||
+                    busy
+                ? null
+                : export,
             icon: busy
                 ? const SizedBox.square(
                     dimension: 18,

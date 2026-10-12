@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'frame.dart';
 import 'number_slider.dart';
@@ -7,11 +8,13 @@ class FrameControls extends StatelessWidget {
   final FrameSettings settings;
   final VoidCallback onChanged;
   final bool hasLogo;
+  final ui.Image? logo;
   const FrameControls({
     super.key,
     required this.settings,
     required this.onChanged,
     required this.hasLogo,
+    this.logo,
   });
 
   void update(VoidCallback change) {
@@ -251,19 +254,26 @@ class FrameControls extends StatelessWidget {
                             children: [
                               SizedBox(
                                 height: 78,
-                                child: CustomPaint(
-                                  size: const Size(110, 78),
-                                  painter: FramePainter(
-                                    FrameSettings()
-                                      ..width = 240
-                                      ..height = 300
-                                      ..style = style
-                                      ..inset = 24
-                                      ..stroke = 3
-                                      ..radius = 12
-                                      ..color = s.color,
-                                  ),
-                                ),
+                                child:
+                                    style == FrameStyle.logoRepeat &&
+                                        logo == null
+                                    ? const Icon(Icons.border_outer, size: 42)
+                                    : CustomPaint(
+                                        size: const Size(110, 78),
+                                        painter: FramePainter(
+                                          FrameSettings()
+                                            ..width = 240
+                                            ..height = 300
+                                            ..style = style
+                                            ..inset = 24
+                                            ..stroke = 3
+                                            ..radius = 12
+                                            ..color = s.color,
+                                          logo: style == FrameStyle.logoRepeat
+                                              ? logo
+                                              : null,
+                                        ),
+                                      ),
                               ),
                               Text(
                                 frameStyleNames[style.index],
@@ -289,76 +299,101 @@ class FrameControls extends StatelessWidget {
               suffix: '%',
             ),
           const SizedBox(height: 12),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final color in [
-                (const Color(0xffc8ccd2), 'فضي'),
-                (const Color(0xffc5a35b), 'ذهبي'),
-                (Colors.white, 'أبيض'),
-                (const Color(0xff3d444c), 'رصاصي'),
-                (Colors.black, 'أسود'),
-              ])
-                ChoiceChip(
-                  avatar: CircleAvatar(backgroundColor: color.$1, radius: 7),
-                  label: Text(color.$2),
-                  selected: s.color == color.$1,
-                  onSelected: (_) => update(() => s.color = color.$1),
-                ),
-              ActionChip(
-                label: const Text('لون مخصص'),
-                onPressed: () => customColor(context),
-              ),
-            ],
-          ),
-        ]),
-        card('اللوجو داخل الفريم', [
-          if (!hasLogo)
+          if (s.style == FrameStyle.logoRepeat) ...[
             const Text(
-              'استورد لوجو PNG من الزر أعلى الإعدادات. يظهر بألوانه الأصلية في فتحة شفافة من الفريم.',
+              'اللوجو يتكرر على الأربع أطراف ويتجه للداخل، بألوانه وشفافيته الأصلية.',
             ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('إظهار اللوجو وفتح الفريم'),
-            value: s.showLogo,
-            onChanged: hasLogo ? (v) => update(() => s.showLogo = v) : null,
-          ),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              for (final position in FramePosition.values)
-                ChoiceChip(
-                  label: Text(
-                    framePositionNames[position.index],
-                    style: const TextStyle(fontSize: 12),
+            if (!hasLogo) const Text('استورد اللوجو أولًا لتكوين الفريم.'),
+            slider(
+              'حجم اللوجو المتكرر',
+              s.repeatScale * 100,
+              4,
+              25,
+              (v) => s.repeatScale = v / 100,
+              suffix: '%',
+            ),
+            slider(
+              'المسافة بين اللوجوهات',
+              s.repeatSpacing * 100,
+              0,
+              15,
+              (v) => s.repeatSpacing = v / 100,
+              suffix: '%',
+            ),
+          ],
+          if (s.style != FrameStyle.logoRepeat)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final color in [
+                  (const Color(0xffc8ccd2), 'فضي'),
+                  (const Color(0xffc5a35b), 'ذهبي'),
+                  (Colors.white, 'أبيض'),
+                  (const Color(0xff3d444c), 'رصاصي'),
+                  (Colors.black, 'أسود'),
+                ])
+                  ChoiceChip(
+                    avatar: CircleAvatar(backgroundColor: color.$1, radius: 7),
+                    label: Text(color.$2),
+                    selected: s.color == color.$1,
+                    onSelected: (_) => update(() => s.color = color.$1),
                   ),
-                  selected: s.position == position,
-                  onSelected: (_) => update(() => s.position = position),
+                ActionChip(
+                  label: const Text('لون مخصص'),
+                  onPressed: () => customColor(context),
                 ),
-            ],
-          ),
-          slider(
-            'حجم اللوجو في الفريم',
-            s.logoWidth * 100,
-            8,
-            60,
-            (v) => s.logoWidth = v / 100,
-            suffix: '%',
-          ),
-          slider('فراغ حول اللوجو', s.gap, 0, 120, (v) => s.gap = v),
-          slider(
-            'ظهور اللوجو',
-            s.logoOpacity * 100,
-            0,
-            100,
-            (v) => s.logoOpacity = v / 100,
-            suffix: '%',
-          ),
+              ],
+            ),
         ]),
+        if (s.style != FrameStyle.logoRepeat)
+          card('اللوجو داخل الفريم', [
+            if (!hasLogo)
+              const Text(
+                'استورد لوجو PNG من الزر أعلى الإعدادات. يظهر بألوانه الأصلية في فتحة شفافة من الفريم.',
+              ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('إظهار اللوجو وفتح الفريم'),
+              value: s.showLogo,
+              onChanged: hasLogo ? (v) => update(() => s.showLogo = v) : null,
+            ),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final position in FramePosition.values)
+                  ChoiceChip(
+                    label: Text(
+                      framePositionNames[position.index],
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    selected: s.position == position,
+                    onSelected: (_) => update(() => s.position = position),
+                  ),
+              ],
+            ),
+            slider(
+              'حجم اللوجو في الفريم',
+              s.logoWidth * 100,
+              8,
+              60,
+              (v) => s.logoWidth = v / 100,
+              suffix: '%',
+            ),
+            slider('فراغ حول اللوجو', s.gap, 0, 120, (v) => s.gap = v),
+            slider(
+              'ظهور اللوجو',
+              s.logoOpacity * 100,
+              0,
+              100,
+              (v) => s.logoOpacity = v / 100,
+              suffix: '%',
+            ),
+          ]),
         card('ضبط الفريم', [
-          slider('سمك الفريم', s.stroke, 1, 40, (v) => s.stroke = v),
+          if (s.style != FrameStyle.logoRepeat)
+            slider('سمك الفريم', s.stroke, 1, 40, (v) => s.stroke = v),
           slider(
             'بعد الفريم عن الحافة',
             s.inset,
@@ -366,7 +401,8 @@ class FrameControls extends StatelessWidget {
             math.min(s.width, s.height) * .24,
             (v) => s.inset = v,
           ),
-          slider('استدارة الأركان', s.radius, 0, 200, (v) => s.radius = v),
+          if (s.style != FrameStyle.logoRepeat)
+            slider('استدارة الأركان', s.radius, 0, 200, (v) => s.radius = v),
           slider(
             'ظهور الفريم',
             s.opacity * 100,
@@ -375,8 +411,10 @@ class FrameControls extends StatelessWidget {
             (v) => s.opacity = v / 100,
             suffix: '%',
           ),
-          const Text(
-            'المنتصف ومساحة اللوجو شفافان في PNG. يمكنك تصدير الفريم وحده أيضًا.',
+          Text(
+            s.style == FrameStyle.logoRepeat
+                ? 'المنتصف شفاف تمامًا، بدون خط أو خلفية خلف اللوجوهات.'
+                : 'المنتصف ومساحة اللوجو شفافان في PNG. يمكنك تصدير الفريم وحده أيضًا.',
             style: TextStyle(fontSize: 12),
           ),
         ]),

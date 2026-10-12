@@ -18,6 +18,7 @@ enum FrameStyle {
   brushGrain,
   oppositeCorners,
   oppositeCornersReverse,
+  logoRepeat,
 }
 
 enum FramePosition {
@@ -46,6 +47,7 @@ const frameStyleNames = [
   'حواف محببة',
   'زاويتان ↘',
   'زاويتان ↙',
+  'فريم من اللوجو',
 ];
 const framePositionNames = [
   'أعلى يسار',
@@ -71,6 +73,7 @@ class FrameSettings {
       opacity = 1,
       logoOpacity = 1;
   double cornerLength = .32;
+  double repeatScale = .12, repeatSpacing = .03;
   bool showLogo = true;
 }
 
@@ -158,6 +161,11 @@ class FramePainter extends CustomPainter {
     canvas.clipRect(
       Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
     );
+    if (s.style == FrameStyle.logoRepeat) {
+      _paintLogoRepeat(canvas);
+      canvas.restore();
+      return;
+    }
     canvas.save();
     if (logo != null && s.showLogo) {
       final allowed = Path.combine(
@@ -296,6 +304,8 @@ class FramePainter extends CustomPainter {
             paint,
           );
         }
+      case FrameStyle.logoRepeat:
+        break; // Painted separately without a border or a single-logo cutout.
     }
     canvas.restore();
     if (logo != null && s.showLogo) {
@@ -314,6 +324,77 @@ class FramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant FramePainter oldDelegate) => true;
+
+  void _paintLogoRepeat(Canvas canvas) {
+    final image = logo;
+    if (image == null) return;
+    final s = settings;
+    final shortest = math.min(s.width, s.height).toDouble();
+    final inset = s.inset.clamp(8.0, shortest * .24);
+    final aspect = image.width / image.height;
+    var width = shortest * s.repeatScale.clamp(.04, .25);
+    var height = width / aspect;
+    if (height > shortest * .18) {
+      height = shortest * .18;
+      width = height * aspect;
+    }
+    width = math.min(width, (shortest - 2 * inset) / (1 + 2 / aspect) * .95);
+    height = width / aspect;
+    final gap = shortest * s.repeatSpacing.clamp(0.0, .15);
+    // Reserve corner squares so the perpendicular runs never overlap.
+    final clearance = height;
+    final source = Rect.fromLTWH(
+      0,
+      0,
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+    final destination = Rect.fromCenter(
+      center: Offset.zero,
+      width: width,
+      height: height,
+    );
+    final paint = Paint()
+      ..filterQuality = FilterQuality.high
+      ..isAntiAlias = true
+      ..color = Color.fromRGBO(255, 255, 255, s.opacity);
+    void side(double length, Offset origin, Offset direction, double rotation) {
+      final available = length - 2 * (inset + clearance);
+      if (available < width) return;
+      final count = ((available + gap) / (width + gap)).floor().clamp(1, 200);
+      final step = count == 1 ? 0.0 : (available - width) / (count - 1);
+      final start = count == 1 ? length / 2 : inset + clearance + width / 2;
+      for (var i = 0; i < count; i++) {
+        final center = origin + direction * (start + i * step);
+        canvas.save();
+        canvas.translate(center.dx, center.dy);
+        canvas.rotate(rotation);
+        canvas.drawImageRect(image, source, destination, paint);
+        canvas.restore();
+      }
+    }
+
+    final depth = inset + height / 2;
+    side(s.width.toDouble(), Offset(0, depth), const Offset(1, 0), math.pi);
+    side(
+      s.width.toDouble(),
+      Offset(0, s.height - depth),
+      const Offset(1, 0),
+      0,
+    );
+    side(
+      s.height.toDouble(),
+      Offset(depth, 0),
+      const Offset(0, 1),
+      math.pi / 2,
+    );
+    side(
+      s.height.toDouble(),
+      Offset(s.width - depth, 0),
+      const Offset(0, 1),
+      -math.pi / 2,
+    );
+  }
 
   void _paintBrush(Canvas canvas, FrameLayout layout, Paint paint) {
     final s = settings, r = layout.border;
