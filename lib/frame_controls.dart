@@ -227,7 +227,15 @@ class FrameControls extends StatelessWidget {
                       selected: s.style == style,
                       child: InkWell(
                         borderRadius: BorderRadius.circular(12),
-                        onTap: () => update(() => s.style = style),
+                        onTap: () => update(() {
+                          s.style = style;
+                          if (style == FrameStyle.oppositeCorners) {
+                            s.position = FramePosition.topLeft;
+                          } else if (style ==
+                              FrameStyle.oppositeCornersReverse) {
+                            s.position = FramePosition.topRight;
+                          }
+                        }),
                         child: Container(
                           padding: const EdgeInsets.all(7),
                           decoration: BoxDecoration(
@@ -270,6 +278,16 @@ class FrameControls extends StatelessWidget {
               ],
             ),
           ),
+          if (s.style == FrameStyle.oppositeCorners ||
+              s.style == FrameStyle.oppositeCornersReverse)
+            slider(
+              'طول أذرع الزوايا',
+              s.cornerLength * 100,
+              10,
+              48,
+              (v) => s.cornerLength = v / 100,
+              suffix: '%',
+            ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 6,

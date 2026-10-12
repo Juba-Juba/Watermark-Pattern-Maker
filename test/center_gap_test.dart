@@ -23,9 +23,7 @@ void main() {
   });
   tearDown(() => logo.dispose());
   for (final size in [const Size(390, 844), const Size(780, 390)]) {
-    testWidgets('Phone preview stays pinned while controls scroll at $size', (
-      tester,
-    ) async {
+    testWidgets('Phone preview scrolls with controls at $size', (tester) async {
       SharedPreferences.setMockInitialValues({});
       tester.view.physicalSize = size;
       tester.view.devicePixelRatio = 1;
@@ -33,7 +31,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
       await tester.pumpWidget(const WatermarkApp());
       await tester.pumpAndSettle();
-      final preview = find.byKey(const ValueKey('pinned-preview'));
+      final preview = find.byKey(const ValueKey('scrolling-preview'));
       final before = tester.getRect(preview);
       final scroller = find.byType(SingleChildScrollView).first;
       final scroll = tester
@@ -46,7 +44,7 @@ void main() {
       await tester.drag(scroller, const Offset(0, -250));
       await tester.pumpAndSettle();
       expect(scroll.pixels, greaterThan(0));
-      expect(tester.getRect(preview), before);
+      expect(tester.getRect(preview).top, lessThan(before.top));
       await tester.tap(find.text('الفريم'));
       await tester.pumpAndSettle();
       expect(tester.getRect(preview), before);

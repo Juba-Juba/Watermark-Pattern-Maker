@@ -3,7 +3,22 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
-enum FrameStyle { minimal, doubleLine, gallery, corners, ornamental, artDeco }
+enum FrameStyle {
+  minimal,
+  doubleLine,
+  gallery,
+  corners,
+  ornamental,
+  artDeco,
+  brushRounded,
+  brushDry,
+  brushTorn,
+  brushStrokes,
+  brushInk,
+  brushGrain,
+  oppositeCorners,
+  oppositeCornersReverse,
+}
 
 enum FramePosition {
   topLeft,
@@ -23,6 +38,14 @@ const frameStyleNames = [
   'أركان',
   'كلاسيك',
   'آرت ديكو',
+  'فرشاة ناعمة',
+  'فرشاة جافة',
+  'حواف ممزقة',
+  'ضربات فرشاة',
+  'حبر متناثر',
+  'حواف محببة',
+  'زاويتان ↘',
+  'زاويتان ↙',
 ];
 const framePositionNames = [
   'أعلى يسار',
@@ -47,6 +70,7 @@ class FrameSettings {
       logoWidth = .28,
       opacity = 1,
       logoOpacity = 1;
+  double cornerLength = .32;
   bool showLogo = true;
 }
 
@@ -246,6 +270,32 @@ class FramePainter extends CustomPainter {
             paint,
           );
         }
+      case FrameStyle.brushRounded:
+      case FrameStyle.brushDry:
+      case FrameStyle.brushTorn:
+      case FrameStyle.brushStrokes:
+      case FrameStyle.brushInk:
+      case FrameStyle.brushGrain:
+        _paintBrush(canvas, layout, paint);
+      case FrameStyle.oppositeCorners:
+      case FrameStyle.oppositeCornersReverse:
+        final length = r.shortestSide * s.cornerLength;
+        paint.strokeWidth = layout.stroke * 2;
+        paint.strokeCap = StrokeCap.square;
+        final corners = s.style == FrameStyle.oppositeCorners
+            ? [r.topLeft, r.bottomRight]
+            : [r.topRight, r.bottomLeft];
+        for (final corner in corners) {
+          final sx = corner.dx == r.left ? 1.0 : -1.0;
+          final sy = corner.dy == r.top ? 1.0 : -1.0;
+          canvas.drawPath(
+            Path()
+              ..moveTo(corner.dx + sx * length, corner.dy)
+              ..lineTo(corner.dx, corner.dy)
+              ..lineTo(corner.dx, corner.dy + sy * length),
+            paint,
+          );
+        }
     }
     canvas.restore();
     if (logo != null && s.showLogo) {
@@ -264,6 +314,92 @@ class FramePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant FramePainter oldDelegate) => true;
+
+  void _paintBrush(Canvas canvas, FrameLayout layout, Paint paint) {
+    final s = settings, r = layout.border;
+    final variant = s.style.index - FrameStyle.brushRounded.index;
+    final random = math.Random(407 + variant * 97);
+    final thickness = math.min(
+      math.max(layout.stroke * 4, r.shortestSide * .045),
+      math.min(s.inset * 1.5, r.shortestSide * .16),
+    );
+    final outer = r.inflate(thickness * .45);
+    final inner = r.deflate(thickness * .55);
+    final roughness = [.22, .65, .9, .75, .8, .4][variant] * thickness;
+    final cornerRadius = variant == 0 || variant == 3
+        ? math.max(layout.radius, thickness * 1.3)
+        : math.min(layout.radius, thickness * .5);
+    final guide = Path()
+      ..addRRect(RRect.fromRectAndRadius(inner, Radius.circular(cornerRadius)));
+    final metric = guide.computeMetrics().first;
+    final samples = (metric.length / (r.shortestSide * .004)).round().clamp(
+      200,
+      1800,
+    );
+    final cutout = Path();
+    for (var i = 0; i < samples; i++) {
+      final tangent = metric.getTangentForOffset(metric.length * i / samples)!;
+      final normal = Offset(-tangent.vector.dy, tangent.vector.dx);
+      final jitter =
+          (math.sin(i * .13 + variant) * .24 +
+              math.sin(i * .41 + variant * 2) * .12 +
+              (random.nextDouble() - .5) * .32) *
+          roughness;
+      final point = tangent.position + normal * jitter;
+      if (i == 0) {
+        cutout.moveTo(point.dx, point.dy);
+      } else {
+        cutout.lineTo(point.dx, point.dy);
+      }
+    }
+    cutout.close();
+    var band = Path.combine(
+      PathOperation.difference,
+      Path()..addRRect(
+        RRect.fromRectAndRadius(
+          outer,
+          Radius.circular(variant == 0 ? layout.radius * .3 : 0),
+        ),
+      ),
+      cutout,
+    );
+    final flecks = Path();
+    for (var i = 0; i < samples; i += 3) {
+      final tangent = metric.getTangentForOffset(metric.length * i / samples)!;
+      final normal = Offset(-tangent.vector.dy, tangent.vector.dx);
+      final point =
+          tangent.position - normal * (random.nextDouble() * roughness * .5);
+      final radius = thickness * (.012 + random.nextDouble() * .045);
+      flecks.addOval(Rect.fromCircle(center: point, radius: radius));
+    }
+    band = Path.combine(PathOperation.difference, band, flecks);
+    paint.style = PaintingStyle.fill;
+    canvas.drawPath(band, paint);
+    // Short bristles and grains extend inward from the rough edge. All geometry
+    // is deterministic, so resizing a preview never regenerates the texture.
+    paint.strokeWidth = math.max(.7, thickness * .025);
+    for (var i = 0; i < samples; i++) {
+      if (random.nextDouble() > .28) continue;
+      final tangent = metric.getTangentForOffset(metric.length * i / samples)!;
+      final normal = Offset(-tangent.vector.dy, tangent.vector.dx);
+      final point =
+          tangent.position + normal * (random.nextDouble() * roughness * .75);
+      if (variant == 3 || variant == 1) {
+        canvas.drawLine(
+          point - normal * (thickness * .12),
+          point + normal * (random.nextDouble() * roughness * .22),
+          paint,
+        );
+      } else {
+        canvas.drawCircle(
+          point,
+          thickness *
+              (.008 + random.nextDouble() * (variant == 4 ? .065 : .025)),
+          paint,
+        );
+      }
+    }
+  }
 }
 
 Future<Uint8List> exportFrame(FrameSettings settings, {ui.Image? logo}) async {

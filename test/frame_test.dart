@@ -17,6 +17,8 @@ void main() {
       'Frame ${style.name}: real alpha gap and original logo colors',
       () async {
         final logo = await logoImage();
+        final reverse = style == FrameStyle.oppositeCornersReverse;
+        final cornerStyle = reverse || style == FrameStyle.oppositeCorners;
         final settings = FrameSettings()
           ..width = 320
           ..height = 400
@@ -24,15 +26,20 @@ void main() {
           ..stroke = 4
           ..gap = 12
           ..style = style
-          ..position = FramePosition.bottom;
+          ..position = cornerStyle
+              ? (reverse ? FramePosition.topRight : FramePosition.topLeft)
+              : FramePosition.bottom;
         final layout = FrameLayout.calculate(
           settings,
           logo.width / logo.height,
         );
         final before = img.decodePng(await exportFrame(settings))!;
         final after = img.decodePng(await exportFrame(settings, logo: logo))!;
-        final x = (layout.logoRect.left - 6).round(),
-            y = layout.border.bottom.round();
+        final x =
+                (reverse ? layout.logoRect.right + 6 : layout.logoRect.left - 6)
+                    .round(),
+            y = (cornerStyle ? layout.border.top : layout.border.bottom)
+                .round();
         expect(before.getPixel(x, y).a, greaterThan(0));
         expect(
           after.getPixel(x, y).a,
@@ -54,6 +61,59 @@ void main() {
       },
     );
   }
+  test(
+    'Opposite corner frames leave the other two corners and middle empty',
+    () async {
+      for (final style in [
+        FrameStyle.oppositeCorners,
+        FrameStyle.oppositeCornersReverse,
+      ]) {
+        final s = FrameSettings()
+          ..width = 320
+          ..height = 400
+          ..inset = 40
+          ..style = style;
+        final output = img.decodePng(await exportFrame(s))!;
+        final reverse = style == FrameStyle.oppositeCornersReverse;
+        expect(output.getPixel(reverse ? 280 : 40, 40).a, greaterThan(0));
+        expect(output.getPixel(reverse ? 40 : 280, 360).a, greaterThan(0));
+        expect(output.getPixel(reverse ? 40 : 280, 40).a, 0);
+        expect(output.getPixel(reverse ? 280 : 40, 360).a, 0);
+        expect(output.getPixel(160, 40).a, 0);
+        expect(output.getPixel(160, 200).a, 0);
+      }
+    },
+  );
+  test(
+    'Six brush frames are distinct, deterministic RGBA with empty centers',
+    () async {
+      final seen = <String>{};
+      for (final style in FrameStyle.values.where(
+        (v) => v.index >= 6 && v.index <= 11,
+      )) {
+        final s = FrameSettings()
+          ..width = 320
+          ..height = 480
+          ..inset = 32
+          ..stroke = 6
+          ..style = style
+          ..color = Colors.white;
+        final bytes = await exportFrame(s);
+        expect(await exportFrame(s), orderedEquals(bytes));
+        final output = img.decodePng(bytes)!;
+        expect(output.getPixel(160, 240).a, 0);
+        expect(output.getPixel(0, 0).a, 0);
+        expect(output.getPixel(160, 32).a, greaterThan(0));
+        expect(output.numChannels, 4);
+        seen.add(bytes.toString());
+        Directory('output/qa/brush-frames').createSync(recursive: true);
+        File(
+          'output/qa/brush-frames/${style.name}.png',
+        ).writeAsBytesSync(bytes);
+      }
+      expect(seen.length, 6);
+    },
+  );
   test('All logo positions fit extreme aspect ratios without stretching', () {
     for (final position in FramePosition.values) {
       for (final aspect in [.1, 1.0, 10.0]) {

@@ -903,7 +903,7 @@ class _EditorState extends State<Editor> {
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
             ),
             Text(
-              'WEB • 1.3.1',
+              'WEB • 1.4.0',
               style: TextStyle(fontSize: 10, letterSpacing: 2),
             ),
           ],
@@ -978,7 +978,7 @@ class _EditorState extends State<Editor> {
           builder: (context, constraints) {
             final wide = constraints.maxWidth > 850;
             final previewCard = Card(
-              key: const ValueKey('pinned-preview'),
+              key: const ValueKey('scrolling-preview'),
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
@@ -1016,18 +1016,11 @@ class _EditorState extends State<Editor> {
                 ),
               );
             }
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+            return SingleChildScrollView(
+              key: ValueKey('mobile-editor-$frameMode'),
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
               child: Column(
-                children: [
-                  previewCard,
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.only(top: 10, bottom: 16),
-                      child: controls(),
-                    ),
-                  ),
-                ],
+                children: [previewCard, const SizedBox(height: 10), controls()],
               ),
             );
           },
