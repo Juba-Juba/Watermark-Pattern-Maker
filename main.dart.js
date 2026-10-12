@@ -118327,7 +118327,7 @@ b1.rN(a5,new A.p(0,0,a6,a9),a7.b,s)}r.restore()},
 fg(a){return!0},
 apZ(b4,b5,b6){var s,r,q,p,o,n,m,l,k,j,i,h,g,f,e,d,c,b,a,a0,a1,a2,a3,a4,a5,a6,a7,a8,a9=null,b0=this.b,b1=b5.a,b2=b0.c.a-6,b3=new A.aFR()
 b3.adt(407+b2*97)
-s=Math.min(Math.max(b5.d*4,b1.gf4()*0.045),Math.min(b0.r*1.5,b1.gf4()*0.16))
+s=Math.min(b5.d*4+b1.gf4()*0.015,Math.min(b0.r*1.5,b1.gf4()*0.16))
 r=b1.d1(s*0.45)
 q=b1.d1(-(s*0.55))
 p=[0.22,0.65,0.9,0.75,0.8,0.4][b2]*s
