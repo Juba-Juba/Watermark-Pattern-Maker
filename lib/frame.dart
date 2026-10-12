@@ -320,7 +320,7 @@ class FramePainter extends CustomPainter {
     final variant = s.style.index - FrameStyle.brushRounded.index;
     final random = math.Random(407 + variant * 97);
     final thickness = math.min(
-      math.max(layout.stroke * 4, r.shortestSide * .045),
+      layout.stroke * 4 + r.shortestSide * .015,
       math.min(s.inset * 1.5, r.shortestSide * .16),
     );
     final outer = r.inflate(thickness * .45);
