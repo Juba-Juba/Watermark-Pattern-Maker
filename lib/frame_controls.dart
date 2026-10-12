@@ -191,29 +191,56 @@ class FrameControls extends StatelessWidget {
               ])
                 ChoiceChip(
                   label: Text(p.$3),
-                  selected: s.width == p.$1 && s.height == p.$2,
+                  selected: s.width * p.$2 == s.height * p.$1,
                   onSelected: (_) => update(() {
-                    s.width = p.$1;
-                    s.height = p.$2;
+                    final factor = math.max(s.width, s.height) == 3840 ? 2 : 1;
+                    s.width = p.$1 * factor;
+                    s.height = p.$2 * factor;
                   }),
                 ),
               ActionChip(
                 label: const Text('مقاس مخصص'),
                 onPressed: () => customSize(context),
               ),
-              ActionChip(
-                label: const Text('4K'),
-                onPressed: () => update(() {
-                  final factor = 3840 / math.max(s.width, s.height);
-                  s.width = (s.width * factor).round();
-                  s.height = (s.height * factor).round();
-                  s.stroke *= factor;
-                  s.inset *= factor;
-                  s.radius *= factor;
-                  s.gap *= factor;
-                }),
-              ),
             ],
+          ),
+        ]),
+        card('دقة تصدير الفريم', [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final resolution in [(1920, 'قياسية'), (3840, '4K')])
+                ChoiceChip(
+                  label: Text(resolution.$2),
+                  selected: math.max(s.width, s.height) == resolution.$1,
+                  onSelected: (_) => update(() {
+                    final factor = resolution.$1 / math.max(s.width, s.height);
+                    s.width = (s.width * factor).round();
+                    s.height = (s.height * factor).round();
+                    s.stroke *= factor;
+                    s.inset *= factor;
+                    s.radius *= factor;
+                    s.gap *= factor;
+                  }),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('${s.width} × ${s.height} بكسل — الدقة تحافظ على نسبة المقاس'),
+        ]),
+        card('شفافية الفريم', [
+          slider(
+            'شفافية الفريم',
+            (1 - s.opacity) * 100,
+            0,
+            100,
+            (v) => s.opacity = 1 - v / 100,
+            suffix: '%',
+          ),
+          const Text(
+            '0% ظاهر بالكامل · 100% شفاف بالكامل',
+            style: TextStyle(fontSize: 12),
           ),
         ]),
         card('اختر تصميم الفريم', [
@@ -403,14 +430,6 @@ class FrameControls extends StatelessWidget {
           ),
           if (s.style != FrameStyle.logoRepeat)
             slider('استدارة الأركان', s.radius, 0, 200, (v) => s.radius = v),
-          slider(
-            'ظهور الفريم',
-            s.opacity * 100,
-            0,
-            100,
-            (v) => s.opacity = v / 100,
-            suffix: '%',
-          ),
           Text(
             s.style == FrameStyle.logoRepeat
                 ? 'المنتصف شفاف تمامًا، بدون خط أو خلفية خلف اللوجوهات.'

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:watermark_pattern_maker/frame.dart';
+import 'package:watermark_pattern_maker/frame_controls.dart';
 import 'package:watermark_pattern_maker/main.dart';
 import 'package:watermark_pattern_maker/pattern.dart';
 import 'pattern_test.dart' show logoImage, FakePicker;
@@ -12,6 +13,76 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  testWidgets(
+    'Frame resolution stays separate from ratio and transparency updates live',
+    (tester) async {
+      final s = FrameSettings();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StatefulBuilder(
+                builder: (context, update) => FrameControls(
+                  settings: s,
+                  hasLogo: false,
+                  onChanged: () => update(() {}),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('4K'));
+      await tester.pumpAndSettle();
+      expect([s.width, s.height], [2160, 3840]);
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '9:16'))
+            .selected,
+        isTrue,
+      );
+      await tester.tap(find.text('3:4'));
+      await tester.pumpAndSettle();
+      expect([s.width, s.height], [2880, 3840]);
+      expect(
+        tester
+            .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, '4K'))
+            .selected,
+        isTrue,
+      );
+      await tester.tap(find.text('قياسية'));
+      await tester.pumpAndSettle();
+      expect([s.width, s.height], [1440, 1920]);
+      final input = find.byKey(const ValueKey('number-شفافية الفريم'));
+      await tester.ensureVisible(input);
+      await tester.enterText(input, '75');
+      await tester.pump();
+      expect(s.opacity, .25);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  test(
+    'Frame transparency changes PNG alpha for drawn and repeated-logo borders',
+    () async {
+      final logo = await logoImage();
+      for (final style in [FrameStyle.minimal, FrameStyle.logoRepeat]) {
+        final s = FrameSettings()
+          ..width = 320
+          ..height = 400
+          ..style = style
+          ..showLogo = false
+          ..opacity = .25;
+        final faded = img.decodePng(await exportFrame(s, logo: logo))!;
+        expect(faded.any((p) => p.a > 0), isTrue);
+        expect(faded.every((p) => p.a <= 64), isTrue);
+        expect(faded.getPixel(160, 200).a, 0);
+        s.opacity = 0;
+        final hidden = img.decodePng(await exportFrame(s, logo: logo))!;
+        expect(hidden.every((p) => p.a == 0), isTrue);
+      }
+      logo.dispose();
+    },
+  );
   for (final style in FrameStyle.values.where(
     (s) => s != FrameStyle.logoRepeat,
   )) {
