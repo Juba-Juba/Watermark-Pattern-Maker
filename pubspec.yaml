@@ -1,0 +1,27 @@
+name: watermark_pattern_maker
+description: Offline Arabic watermark pattern editor with true alpha PNG export.
+publish_to: 'none'
+version: 1.0.0+1
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  image: ^4.5.4
+  image_picker: ^1.2.0
+  shared_preferences: ^2.5.3
+  web: ^1.1.1
+  cupertino_icons: ^1.0.8
+dev_dependencies:
+  image_picker_platform_interface: ^2.11.2
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+flutter:
+  uses-material-design: true
+  fonts:
+    - family: NotoSansArabic
+      fonts:
+        - asset: assets/fonts/NotoSansArabic.ttf
