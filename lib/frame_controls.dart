@@ -223,6 +223,7 @@ class FrameControls extends StatelessWidget {
                     s.radius *= factor;
                     s.gap *= factor;
                     s.gapFeather *= factor;
+                    s.logoInset *= factor;
                   }),
                 ),
             ],
@@ -331,7 +332,7 @@ class FrameControls extends StatelessWidget {
           const SizedBox(height: 12),
           if (s.style == FrameStyle.logoRepeat) ...[
             const Text(
-              'اللوجو يتكرر على الأربع أطراف وقاعدته للداخل، بألوانه وشفافيته الأصلية.',
+              'اللوجو يتكرر بألوانه الأصلية؛ قاعدة الصف السفلي لأسفل للخارج، وباقي الأطراف للداخل.',
             ),
             if (!hasLogo) const Text('استورد اللوجو أولًا لتكوين الفريم.'),
             slider(
@@ -471,6 +472,18 @@ class FrameControls extends StatelessWidget {
               suffix: '%',
             ),
           ]),
+        card('بعد اللوجو عن الحافة', [
+          slider(
+            'بعد اللوجو عن الحافة',
+            s.logoInset,
+            0,
+            math.min(s.width, s.height) * .24,
+            (v) => s.logoInset = v,
+          ),
+          const Text(
+            'يتحرك كل لوجو للداخل حسب موقعه، ويشمل النسخ والعلامات الجانبية وفريم اللوجو.',
+          ),
+        ]),
         card('ضبط الفريم', [
           if (s.style != FrameStyle.logoRepeat)
             slider(

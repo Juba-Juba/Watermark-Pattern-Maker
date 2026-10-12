@@ -76,6 +76,7 @@ class FrameSettings {
       logoOpacity = 1;
   double cornerLength = .32;
   double gapFeather = 36;
+  double logoInset = 0;
   double repeatScale = .12, repeatSpacing = .03;
   bool showLogo = true;
   bool duplicateLogo = false;
@@ -140,9 +141,28 @@ class FrameLayout {
         border.bottom,
       ),
     };
-    final center = Offset(
+    final base = Offset(
       anchor.dx.clamp(actualW / 2, s.width - actualW / 2),
       anchor.dy.clamp(h / 2, s.height - h / 2),
+    );
+    final distance = s.logoInset.clamp(0.0, shortest * .24);
+    final inward = switch (position ?? s.position) {
+      FramePosition.topLeft => const Offset(1, 1),
+      FramePosition.top => const Offset(0, 1),
+      FramePosition.topRight => const Offset(-1, 1),
+      FramePosition.left => const Offset(1, 0),
+      FramePosition.right => const Offset(-1, 0),
+      FramePosition.bottomLeft => const Offset(1, -1),
+      FramePosition.bottom => const Offset(0, -1),
+      FramePosition.bottomRight => const Offset(-1, -1),
+      FramePosition.sideMarks => Offset(secondSide ? -1 : 1, 0),
+    };
+    final center = Offset(
+      (base.dx + inward.dx * distance).clamp(
+        actualW / 2,
+        s.width - actualW / 2,
+      ),
+      (base.dy + inward.dy * distance).clamp(h / 2, s.height - h / 2),
     );
     // Fit into the canvas without stretching or cropping any logo pixels.
     final maxW = 2 * math.min(center.dx, s.width - center.dx);
@@ -196,6 +216,7 @@ class FramePainter extends CustomPainter {
         settings.gap,
         settings.gapFeather,
         settings.logoWidth,
+        settings.logoInset,
         settings.opacity,
         settings.logoOpacity,
         settings.cornerLength,
@@ -462,7 +483,9 @@ class FramePainter extends CustomPainter {
     if (image == null) return;
     final s = settings;
     final shortest = math.min(s.width, s.height).toDouble();
-    final inset = s.inset.clamp(0.0, shortest * .24);
+    final inset =
+        s.inset.clamp(0.0, shortest * .24) +
+        s.logoInset.clamp(0.0, shortest * .24);
     final aspect = image.width / image.height;
     var width = shortest * s.repeatScale.clamp(.04, .25);
     var height = width / aspect;
@@ -512,7 +535,7 @@ class FramePainter extends CustomPainter {
       s.width.toDouble(),
       Offset(0, s.height - depth),
       const Offset(1, 0),
-      math.pi,
+      0,
     );
     side(
       s.height.toDouble(),

@@ -14,6 +14,61 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
+    'Logo margin moves every placement inward without moving frame or resizing copies',
+    () {
+      for (final position in FramePosition.values) {
+        final s = FrameSettings()
+          ..width = 320
+          ..height = 400
+          ..position = position;
+        final original = frameLogoLayouts(s, 2);
+        final oldPainter = FramePainter(s);
+        s.logoInset = 20;
+        final moved = frameLogoLayouts(s, 2);
+        expect(FramePainter(s).shouldRepaint(oldPainter), isTrue);
+        for (var i = 0; i < original.length; i++) {
+          final a = original[i], b = moved[i];
+          expect(b.border, a.border);
+          expect(b.logoRect.width, closeTo(a.logoRect.width, .001));
+          expect(b.logoRect.height, closeTo(a.logoRect.height, .001));
+          expect(
+            (b.logoRect.center - const Offset(160, 200)).distance,
+            lessThan((a.logoRect.center - const Offset(160, 200)).distance),
+          );
+        }
+      }
+      final s = FrameSettings()
+        ..width = 320
+        ..height = 400
+        ..position = FramePosition.left
+        ..duplicateLogo = true
+        ..duplicatePosition = FramePosition.right
+        ..logoInset = 24;
+      final pair = frameLogoLayouts(s, 2);
+      expect(pair[0].logoRect.left, closeTo(24, .001));
+      expect(pair[1].logoRect.right, closeTo(296, .001));
+    },
+  );
+  test(
+    'Repeated logo margin creates transparent padding on all four canvas edges',
+    () async {
+      final logo = await logoImage();
+      final s = FrameSettings()
+        ..width = 320
+        ..height = 400
+        ..style = FrameStyle.logoRepeat
+        ..logoInset = 20;
+      final output = img.decodePng(await exportFrame(s, logo: logo))!;
+      expect(output.any((p) => p.a > 0), isTrue);
+      for (final p in output) {
+        if (p.x < 20 || p.x >= 300 || p.y < 20 || p.y >= 380) expect(p.a, 0);
+      }
+      expect(output.getPixel(160, 200).a, 0);
+      logo.dispose();
+    },
+  );
+
+  test(
     'Side marks export two original-color logos with shared alpha and gaps',
     () async {
       final logo = await logoImage();
@@ -343,7 +398,7 @@ void main() {
     );
   }
   test(
-    'Logo border base points inward on every edge, preserves RGB and alpha',
+    'Logo border bottom base points outward, other edges inward, preserves RGB and alpha',
     () async {
       final source = img.Image(width: 40, height: 20, numChannels: 4);
       for (var y = 0; y < 20; y++) {
@@ -371,8 +426,8 @@ void main() {
       expect(output.numChannels, 4);
       expect(output.getPixel(160, 200).a, 0);
       expect(output.getPixel(0, 0).a, 0);
-      // Blue is the base of the source logo and must face the canvas center.
-      for (final point in [(64, 38), (64, 361), (38, 64), (281, 64)]) {
+      // Blue base faces inward except the bottom row, whose base faces down.
+      for (final point in [(64, 38), (64, 371), (38, 64), (281, 64)]) {
         final p = output.getPixel(point.$1, point.$2);
         expect(p.r, closeTo(20, 2));
         expect(p.b, closeTo(230, 2));
