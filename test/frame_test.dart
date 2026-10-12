@@ -13,6 +13,84 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test(
+    'Default frame touches canvas edges and moving inset creates a real margin',
+    () async {
+      final s = FrameSettings()
+        ..width = 320
+        ..height = 400
+        ..style = FrameStyle.minimal;
+      expect(s.inset, 0);
+      final edge = img.decodePng(await exportFrame(s))!;
+      expect(edge.getPixel(160, 0).a, greaterThan(0));
+      expect(edge.getPixel(0, 200).a, greaterThan(0));
+      expect(edge.getPixel(160, 399).a, greaterThan(0));
+      s.inset = 20;
+      final moved = img.decodePng(await exportFrame(s))!;
+      expect(moved.getPixel(160, 0).a, 0);
+      expect(moved.getPixel(160, 22).a, greaterThan(0));
+    },
+  );
+  test(
+    'Logo gap fades smoothly into the frame without changing RGB or logo alpha',
+    () async {
+      final logo = await logoImage();
+      final s = FrameSettings()
+        ..width = 320
+        ..height = 400
+        ..style = FrameStyle.minimal
+        ..inset = 24
+        ..stroke = 6
+        ..gap = 12
+        ..gapFeather = 40
+        ..color = Colors.white;
+      final layout = FrameLayout.calculate(s, logo.width / logo.height);
+      final output = img.decodePng(await exportFrame(s, logo: logo))!;
+      final y = layout.border.bottom.floor();
+      final x = layout.gapRect.right.ceil();
+      final a = [
+        for (final dx in [4, 16, 32, 48]) output.getPixel(x + dx, y).a,
+      ];
+      expect(a[0], greaterThan(0));
+      expect(a[0], lessThan(a[1]));
+      expect(a[1], lessThan(a[2]));
+      expect(a[2], lessThan(a[3]));
+      expect(a[3], 255);
+      expect(output.getPixel(x + 16, y).r, 255);
+      expect(output.getPixel(x - 2, y).a, 0);
+      final p = output.getPixel(
+        layout.logoRect.center.dx.round(),
+        layout.logoRect.center.dy.round(),
+      );
+      expect([p.r, p.g, p.b, p.a], [20, 100, 210, 255]);
+      expect(output.getPixel(160, 200).a, 0);
+      s.gapFeather = 0;
+      final hard = img.decodePng(await exportFrame(s, logo: logo))!;
+      expect(hard.getPixel(x + 4, y).a, 255);
+      Directory('output/qa').createSync(recursive: true);
+      File(
+        'output/qa/frame-soft-gap.png',
+      ).writeAsBytesSync(img.encodePng(output));
+      logo.dispose();
+    },
+  );
+  test(
+    'Painter revisions skip unchanged redraws and detect mutations',
+    () async {
+      final logo = await logoImage();
+      final s = FrameSettings();
+      final before = FramePainter(s, logo: logo);
+      expect(FramePainter(s, logo: logo).shouldRepaint(before), isFalse);
+      s.gapFeather += 10;
+      expect(FramePainter(s, logo: logo).shouldRepaint(before), isTrue);
+      final pattern = PatternSettings();
+      final oldPattern = PatternPainter(logo, pattern);
+      expect(PatternPainter(logo, pattern).shouldRepaint(oldPattern), isFalse);
+      pattern.opacity = .2;
+      expect(PatternPainter(logo, pattern).shouldRepaint(oldPattern), isTrue);
+      logo.dispose();
+    },
+  );
   testWidgets(
     'Frame resolution stays separate from ratio and transparency updates live',
     (tester) async {
@@ -225,11 +303,17 @@ void main() {
           ..style = style;
         final output = img.decodePng(await exportFrame(s))!;
         final reverse = style == FrameStyle.oppositeCornersReverse;
-        expect(output.getPixel(reverse ? 280 : 40, 40).a, greaterThan(0));
-        expect(output.getPixel(reverse ? 40 : 280, 360).a, greaterThan(0));
-        expect(output.getPixel(reverse ? 40 : 280, 40).a, 0);
-        expect(output.getPixel(reverse ? 280 : 40, 360).a, 0);
-        expect(output.getPixel(160, 40).a, 0);
+        final r = FrameLayout.calculate(s, null).border;
+        final left = r.left.round(), right = r.right.round();
+        final top = r.top.round(), bottom = r.bottom.round();
+        expect(output.getPixel(reverse ? right : left, top).a, greaterThan(0));
+        expect(
+          output.getPixel(reverse ? left : right, bottom).a,
+          greaterThan(0),
+        );
+        expect(output.getPixel(reverse ? left : right, top).a, 0);
+        expect(output.getPixel(reverse ? right : left, bottom).a, 0);
+        expect(output.getPixel(160, top).a, 0);
         expect(output.getPixel(160, 200).a, 0);
       }
     },

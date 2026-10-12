@@ -110,7 +110,9 @@ Size patternFootprint(PatternSettings s, double aspect) {
 class PatternPainter extends CustomPainter {
   final ui.Image logo;
   final PatternSettings settings;
-  PatternPainter(this.logo, this.settings);
+  final int _revision;
+  PatternPainter(this.logo, this.settings)
+    : _revision = Object.hashAll(settings.toJson().values);
   int draw(Canvas canvas, Size size) {
     final s = settings;
     canvas.save();
@@ -228,7 +230,8 @@ class PatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) => draw(canvas, size);
   @override
-  bool shouldRepaint(covariant PatternPainter oldDelegate) => true;
+  bool shouldRepaint(covariant PatternPainter oldDelegate) =>
+      logo != oldDelegate.logo || _revision != oldDelegate._revision;
 }
 
 Future<Uint8List> exportPattern(ui.Image logo, PatternSettings s) async {

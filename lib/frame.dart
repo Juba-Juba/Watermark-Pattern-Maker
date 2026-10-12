@@ -66,13 +66,14 @@ class FrameSettings {
   FramePosition position = FramePosition.bottom;
   Color color = const Color(0xffc8ccd2);
   double stroke = 5,
-      inset = 64,
-      radius = 32,
+      inset = 0,
+      radius = 0,
       gap = 18,
       logoWidth = .28,
       opacity = 1,
       logoOpacity = 1;
   double cornerLength = .32;
+  double gapFeather = 36;
   double repeatScale = .12, repeatSpacing = .03;
   bool showLogo = true;
 }
@@ -89,8 +90,14 @@ class FrameLayout {
   );
   factory FrameLayout.calculate(FrameSettings s, double? aspect) {
     final shortest = math.min(s.width, s.height).toDouble();
-    final inset = s.inset.clamp(8.0, shortest * .24);
-    final stroke = s.stroke.clamp(1.0, inset / 2);
+    final stroke = s.stroke.clamp(1.0, shortest * .08);
+    final thickOutline =
+        s.style == FrameStyle.gallery ||
+        s.style == FrameStyle.corners ||
+        s.style == FrameStyle.oppositeCorners ||
+        s.style == FrameStyle.oppositeCornersReverse;
+    final inset =
+        s.inset.clamp(0.0, shortest * .24) + stroke * (thickOutline ? 1 : .5);
     final border = Rect.fromLTRB(
       inset,
       inset,
@@ -104,7 +111,7 @@ class FrameLayout {
       border.width * .25,
       math.max(actualW / 2 + s.gap, s.radius),
     );
-    final center = switch (s.position) {
+    final anchor = switch (s.position) {
       FramePosition.topLeft => Offset(border.left + cornerOffset, border.top),
       FramePosition.top => border.topCenter,
       FramePosition.topRight => Offset(border.right - cornerOffset, border.top),
@@ -120,6 +127,10 @@ class FrameLayout {
         border.bottom,
       ),
     };
+    final center = Offset(
+      anchor.dx.clamp(actualW / 2, s.width - actualW / 2),
+      anchor.dy.clamp(h / 2, s.height - h / 2),
+    );
     // Fit into the canvas without stretching or cropping any logo pixels.
     final maxW = 2 * math.min(center.dx, s.width - center.dx);
     final maxH = 2 * math.min(center.dy, s.height - center.dy);
@@ -142,7 +153,27 @@ class FrameLayout {
 class FramePainter extends CustomPainter {
   final FrameSettings settings;
   final ui.Image? logo;
-  FramePainter(this.settings, {this.logo});
+  final int _revision;
+  FramePainter(this.settings, {this.logo})
+    : _revision = Object.hashAll([
+        settings.width,
+        settings.height,
+        settings.style,
+        settings.position,
+        settings.color,
+        settings.stroke,
+        settings.inset,
+        settings.radius,
+        settings.gap,
+        settings.gapFeather,
+        settings.logoWidth,
+        settings.opacity,
+        settings.logoOpacity,
+        settings.cornerLength,
+        settings.repeatScale,
+        settings.repeatSpacing,
+        settings.showLogo,
+      ]);
   @override
   void paint(Canvas canvas, Size size) {
     final s = settings;
@@ -166,8 +197,16 @@ class FramePainter extends CustomPainter {
       canvas.restore();
       return;
     }
-    canvas.save();
-    if (logo != null && s.showLogo) {
+    final softGap = logo != null && s.showLogo && s.gapFeather > 0;
+    if (softGap) {
+      canvas.saveLayer(
+        Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
+        Paint(),
+      );
+    } else {
+      canvas.save();
+    }
+    if (logo != null && s.showLogo && !softGap) {
       final allowed = Path.combine(
         PathOperation.difference,
         Path()..addRect(
@@ -307,6 +346,7 @@ class FramePainter extends CustomPainter {
       case FrameStyle.logoRepeat:
         break; // Painted separately without a border or a single-logo cutout.
     }
+    if (softGap) _eraseSoftGap(canvas, layout.gapRect, s.gapFeather);
     canvas.restore();
     if (logo != null && s.showLogo) {
       canvas.drawImageRect(
@@ -323,14 +363,62 @@ class FramePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant FramePainter oldDelegate) => true;
+  bool shouldRepaint(covariant FramePainter oldDelegate) =>
+      _revision != oldDelegate._revision || logo != oldDelegate.logo;
+
+  void _eraseSoftGap(Canvas canvas, Rect core, double feather) {
+    final erase = Paint()..blendMode = BlendMode.dstOut;
+    canvas.drawRect(core, erase..color = Colors.black);
+    void strip(Rect rect, Offset from, Offset to) {
+      erase.shader = ui.Gradient.linear(from, to, [
+        Colors.black,
+        Colors.transparent,
+      ]);
+      canvas.drawRect(rect, erase);
+    }
+
+    strip(
+      Rect.fromLTRB(core.left, core.top - feather, core.right, core.top),
+      core.topCenter,
+      core.topCenter - Offset(0, feather),
+    );
+    strip(
+      Rect.fromLTRB(core.left, core.bottom, core.right, core.bottom + feather),
+      core.bottomCenter,
+      core.bottomCenter + Offset(0, feather),
+    );
+    strip(
+      Rect.fromLTRB(core.left - feather, core.top, core.left, core.bottom),
+      core.centerLeft,
+      core.centerLeft - Offset(feather, 0),
+    );
+    strip(
+      Rect.fromLTRB(core.right, core.top, core.right + feather, core.bottom),
+      core.centerRight,
+      core.centerRight + Offset(feather, 0),
+    );
+    for (final corner in [
+      core.topLeft,
+      core.topRight,
+      core.bottomLeft,
+      core.bottomRight,
+    ]) {
+      final dx = corner.dx == core.left ? -feather : feather;
+      final dy = corner.dy == core.top ? -feather : feather;
+      erase.shader = ui.Gradient.radial(corner, feather, [
+        Colors.black,
+        Colors.transparent,
+      ]);
+      canvas.drawRect(Rect.fromPoints(corner, corner + Offset(dx, dy)), erase);
+    }
+  }
 
   void _paintLogoRepeat(Canvas canvas) {
     final image = logo;
     if (image == null) return;
     final s = settings;
     final shortest = math.min(s.width, s.height).toDouble();
-    final inset = s.inset.clamp(8.0, shortest * .24);
+    final inset = s.inset.clamp(0.0, shortest * .24);
     final aspect = image.width / image.height;
     var width = shortest * s.repeatScale.clamp(.04, .25);
     var height = width / aspect;
@@ -402,10 +490,15 @@ class FramePainter extends CustomPainter {
     final random = math.Random(407 + variant * 97);
     final thickness = math.min(
       layout.stroke * 4 + r.shortestSide * .015,
-      math.min(s.inset * 1.5, r.shortestSide * .16),
+      r.shortestSide * .16,
     );
-    final outer = r.inflate(thickness * .45);
-    final inner = r.deflate(thickness * .55);
+    final outer = Rect.fromLTRB(
+      settings.inset,
+      settings.inset,
+      s.width - settings.inset,
+      s.height - settings.inset,
+    );
+    final inner = outer.deflate(thickness);
     final roughness = [.22, .65, .9, .75, .8, .4][variant] * thickness;
     final cornerRadius = variant == 0 || variant == 3
         ? math.max(layout.radius, thickness * 1.3)

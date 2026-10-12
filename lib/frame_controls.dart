@@ -222,6 +222,7 @@ class FrameControls extends StatelessWidget {
                     s.inset *= factor;
                     s.radius *= factor;
                     s.gap *= factor;
+                    s.gapFeather *= factor;
                   }),
                 ),
             ],
@@ -281,26 +282,28 @@ class FrameControls extends StatelessWidget {
                             children: [
                               SizedBox(
                                 height: 78,
-                                child:
-                                    style == FrameStyle.logoRepeat &&
-                                        logo == null
-                                    ? const Icon(Icons.border_outer, size: 42)
-                                    : CustomPaint(
-                                        size: const Size(110, 78),
-                                        painter: FramePainter(
-                                          FrameSettings()
-                                            ..width = 240
-                                            ..height = 300
-                                            ..style = style
-                                            ..inset = 24
-                                            ..stroke = 3
-                                            ..radius = 12
-                                            ..color = s.color,
-                                          logo: style == FrameStyle.logoRepeat
-                                              ? logo
-                                              : null,
+                                child: RepaintBoundary(
+                                  child:
+                                      style == FrameStyle.logoRepeat &&
+                                          logo == null
+                                      ? const Icon(Icons.border_outer, size: 42)
+                                      : CustomPaint(
+                                          size: const Size(110, 78),
+                                          painter: FramePainter(
+                                            FrameSettings()
+                                              ..width = 240
+                                              ..height = 300
+                                              ..style = style
+                                              ..inset = 24
+                                              ..stroke = 3
+                                              ..radius = 12
+                                              ..color = s.color,
+                                            logo: style == FrameStyle.logoRepeat
+                                                ? logo
+                                                : null,
+                                          ),
                                         ),
-                                      ),
+                                ),
                               ),
                               Text(
                                 frameStyleNames[style.index],
@@ -410,6 +413,17 @@ class FrameControls extends StatelessWidget {
             ),
             slider('فراغ حول اللوجو', s.gap, 0, 120, (v) => s.gap = v),
             slider(
+              'تدرج الفراغ نحو الفريم',
+              s.gapFeather,
+              0,
+              240,
+              (v) => s.gapFeather = v,
+            ),
+            const Text(
+              'يتلاشى الفريم بجوار اللوجو ثم يظهر تدريجيًا باتجاه الأطراف.',
+              style: TextStyle(fontSize: 12),
+            ),
+            slider(
               'ظهور اللوجو',
               s.logoOpacity * 100,
               0,
@@ -420,11 +434,17 @@ class FrameControls extends StatelessWidget {
           ]),
         card('ضبط الفريم', [
           if (s.style != FrameStyle.logoRepeat)
-            slider('سمك الفريم', s.stroke, 1, 40, (v) => s.stroke = v),
+            slider(
+              'سمك الفريم',
+              s.stroke,
+              1,
+              math.min(s.width, s.height) * .08,
+              (v) => s.stroke = v,
+            ),
           slider(
             'بعد الفريم عن الحافة',
             s.inset,
-            8,
+            0,
             math.min(s.width, s.height) * .24,
             (v) => s.inset = v,
           ),

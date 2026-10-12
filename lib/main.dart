@@ -382,59 +382,63 @@ class _EditorState extends State<Editor> {
       child: AspectRatio(
         aspectRatio: canvasWidth / canvasHeight,
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (backdrop == 0)
-                CustomPaint(painter: CheckerPainter())
-              else
-                ColoredBox(color: backdrop == 1 ? Colors.black : Colors.white),
-              if (backdrop == 3 && background != null)
-                RawImage(image: background, fit: BoxFit.cover),
-              if (frameMode)
-                CustomPaint(painter: FramePainter(frame, logo: logo))
-              else if (logo != null)
-                CustomPaint(painter: PatternPainter(logo!, s))
-              else
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: SizedBox(
-                        width: 160,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.texture_rounded,
-                              size: 64,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(height: 16),
-                            const Text(
-                              'شعارك، بنمط متكرر',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Color(0xff36404a),
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
+          borderRadius: BorderRadius.circular(frameMode ? 0 : 16),
+          child: RepaintBoundary(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (backdrop == 0)
+                  CustomPaint(painter: CheckerPainter())
+                else
+                  ColoredBox(
+                    color: backdrop == 1 ? Colors.black : Colors.white,
+                  ),
+                if (backdrop == 3 && background != null)
+                  RawImage(image: background, fit: BoxFit.cover),
+                if (frameMode)
+                  CustomPaint(painter: FramePainter(frame, logo: logo))
+                else if (logo != null)
+                  CustomPaint(painter: PatternPainter(logo!, s))
+                else
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: SizedBox(
+                          width: 160,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.texture_rounded,
+                                size: 64,
+                                color: Theme.of(context).colorScheme.primary,
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'استورد PNG شفاف للبدء',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Color(0xff36404a)),
-                            ),
-                          ],
+                              const SizedBox(height: 16),
+                              const Text(
+                                'شعارك، بنمط متكرر',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Color(0xff36404a),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'استورد PNG شفاف للبدء',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Color(0xff36404a)),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -904,7 +908,7 @@ class _EditorState extends State<Editor> {
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
             ),
             Text(
-              'WEB • 1.6.0',
+              'WEB • 1.7.0',
               style: TextStyle(fontSize: 10, letterSpacing: 2),
             ),
           ],
