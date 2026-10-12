@@ -375,24 +375,24 @@ class FramePainter extends CustomPainter {
     }
 
     final depth = inset + height / 2;
-    side(s.width.toDouble(), Offset(0, depth), const Offset(1, 0), math.pi);
+    side(s.width.toDouble(), Offset(0, depth), const Offset(1, 0), 0);
     side(
       s.width.toDouble(),
       Offset(0, s.height - depth),
       const Offset(1, 0),
-      0,
+      math.pi,
     );
     side(
       s.height.toDouble(),
       Offset(depth, 0),
       const Offset(0, 1),
-      math.pi / 2,
+      -math.pi / 2,
     );
     side(
       s.height.toDouble(),
       Offset(s.width - depth, 0),
       const Offset(0, 1),
-      -math.pi / 2,
+      math.pi / 2,
     );
   }
 

@@ -64,7 +64,7 @@ void main() {
     );
   }
   test(
-    'Logo border points inward on every edge, preserves RGB and alpha',
+    'Logo border base points inward on every edge, preserves RGB and alpha',
     () async {
       final source = img.Image(width: 40, height: 20, numChannels: 4);
       for (var y = 0; y < 20; y++) {
@@ -92,11 +92,11 @@ void main() {
       expect(output.numChannels, 4);
       expect(output.getPixel(160, 200).a, 0);
       expect(output.getPixel(0, 0).a, 0);
-      // Red is the top of the source logo and must face the canvas center.
+      // Blue is the base of the source logo and must face the canvas center.
       for (final point in [(64, 38), (64, 361), (38, 64), (281, 64)]) {
         final p = output.getPixel(point.$1, point.$2);
-        expect(p.r, closeTo(230, 2));
-        expect(p.b, closeTo(20, 2));
+        expect(p.r, closeTo(20, 2));
+        expect(p.b, closeTo(230, 2));
         expect(p.a, closeTo(128, 1));
       }
       for (final p in output) {

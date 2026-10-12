@@ -301,7 +301,7 @@ class FrameControls extends StatelessWidget {
           const SizedBox(height: 12),
           if (s.style == FrameStyle.logoRepeat) ...[
             const Text(
-              'اللوجو يتكرر على الأربع أطراف ويتجه للداخل، بألوانه وشفافيته الأصلية.',
+              'اللوجو يتكرر على الأربع أطراف وقاعدته للداخل، بألوانه وشفافيته الأصلية.',
             ),
             if (!hasLogo) const Text('استورد اللوجو أولًا لتكوين الفريم.'),
             slider(
