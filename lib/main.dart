@@ -3,14 +3,22 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'image_processing.dart';
 import 'pattern.dart';
 import 'save_file.dart';
+import 'number_slider.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  LicenseRegistry.addLicense(() async* {
+    yield LicenseEntryWithLineBreaks([
+      'Noto Sans Arabic',
+    ], await rootBundle.loadString('assets/fonts/OFL.txt'));
+  });
   runApp(const WatermarkApp());
 }
 
@@ -33,14 +41,14 @@ class _WatermarkAppState extends State<WatermarkApp> {
     theme: ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
-      colorSchemeSeed: const Color(0xff7654cf),
+      colorSchemeSeed: const Color(0xff526779),
       fontFamily: 'NotoSansArabic',
     ),
     darkTheme: ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: const Color(0xff10121c),
-      colorSchemeSeed: const Color(0xffb99afc),
+      scaffoldBackgroundColor: const Color(0xff141618),
+      colorSchemeSeed: const Color(0xffaab8c5),
       fontFamily: 'NotoSansArabic',
     ),
     home: Editor(
@@ -63,7 +71,8 @@ class _EditorState extends State<Editor> {
   ui.Image? logo, background;
   final picker = ImagePicker();
   bool busy = false;
-  int backdrop = 0;
+  int backdrop = 0, editorTab = 0;
+  bool linkSpacing = false;
   String? filename;
   Map<String, dynamic> presets = {};
   String? selectedPreset;
@@ -305,29 +314,28 @@ class _EditorState extends State<Editor> {
     double max,
     ValueChanged<double> change, {
     String suffix = '',
-  }) => Column(
-    children: [
-      Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label),
-          Text(
-            '${value.round()}$suffix',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.primary,
-              fontFeatures: const [ui.FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
-      Slider(
-        value: value.clamp(min, max),
-        min: min,
-        max: max,
-        onChanged: (v) => setState(() => change(v)),
-      ),
-    ],
+  }) => NumberSlider(
+    key: ValueKey(label),
+    label: label,
+    value: value,
+    min: min,
+    max: max,
+    suffix: suffix,
+    onChanged: (v) => setState(() => change(v)),
   );
+  double get logoHeight =>
+      s.scale * (logo == null ? 1 : logo!.height / logo!.width);
+  double get spacingPercentX => (1 + s.spacingX / s.scale) * 100;
+  double get spacingPercentY => (1 + s.spacingY / logoHeight) * 100;
+  void setSpacing(double value, {required bool horizontal}) {
+    if (horizontal || linkSpacing) {
+      s.spacingX = s.scale * (value / 100 - 1);
+    }
+    if (!horizontal || linkSpacing) {
+      s.spacingY = logoHeight * (value / 100 - 1);
+    }
+  }
+
   Widget section(String title, List<Widget> children) => Card(
     margin: const EdgeInsets.only(bottom: 14),
     child: Padding(
@@ -347,346 +355,483 @@ class _EditorState extends State<Editor> {
       ),
     ),
   );
+  Widget previewCanvas(double height) => SizedBox(
+    height: height,
+    child: Center(
+      child: AspectRatio(
+        aspectRatio: s.width / s.height,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (backdrop == 0)
+                CustomPaint(painter: CheckerPainter())
+              else
+                ColoredBox(color: backdrop == 1 ? Colors.black : Colors.white),
+              if (backdrop == 3 && background != null)
+                RawImage(image: background, fit: BoxFit.cover),
+              if (logo != null)
+                CustomPaint(painter: PatternPainter(logo!, s))
+              else
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: SizedBox(
+                        width: 160,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.texture_rounded,
+                              size: 64,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                            const SizedBox(height: 16),
+                            const Text(
+                              'شعارك، بنمط متكرر',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Color(0xff36404a),
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'استورد PNG شفاف للبدء',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Color(0xff36404a)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+  Widget previewOptions(VoidCallback? refresh) => Wrap(
+    spacing: 5,
+    children: [
+      for (final item in [(0, 'شفافة'), (1, 'سوداء'), (2, 'بيضاء')])
+        ChoiceChip(
+          label: Text(item.$2, style: const TextStyle(fontSize: 11)),
+          showCheckmark: false,
+          visualDensity: VisualDensity.compact,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+          padding: EdgeInsets.zero,
+          selected: backdrop == item.$1,
+          onSelected: (_) {
+            setState(() => backdrop = item.$1);
+            refresh?.call();
+          },
+        ),
+      ActionChip(
+        label: const Text('صورة', style: TextStyle(fontSize: 11)),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        labelPadding: const EdgeInsets.symmetric(horizontal: 4),
+        padding: EdgeInsets.zero,
+        avatar: const Icon(Icons.photo_outlined, size: 16),
+        onPressed: busy ? null : () => pick(isBackground: true),
+      ),
+    ],
+  );
   Widget preview({
     bool full = false,
     double height = 350,
     VoidCallback? refresh,
-  }) => Column(
-    children: [
-      Row(
-        children: [
-          const Icon(Icons.visibility_outlined, size: 18),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'معاينة مباشرة',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Text('${s.width} × ${s.height}', textDirection: TextDirection.ltr),
-        ],
-      ),
-      const SizedBox(height: 12),
-      SizedBox(
-        height: full ? MediaQuery.sizeOf(context).height * .65 : height,
-        child: Center(
-          child: AspectRatio(
-            aspectRatio: s.width / s.height,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Stack(
-                fit: StackFit.expand,
+  }) {
+    final dimensions = Text(
+      '${s.width} × ${s.height}',
+      textDirection: TextDirection.ltr,
+      style: Theme.of(context).textTheme.bodySmall,
+    );
+    const title = Text(
+      'معاينة مباشرة',
+      style: TextStyle(fontWeight: FontWeight.w600),
+    );
+    final note = Text(
+      'خلفية المعاينة لا تدخل في التصدير',
+      style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+    );
+    if (!full && MediaQuery.sizeOf(context).width < 850) {
+      return SizedBox(
+        height: 174,
+        child: Row(
+          children: [
+            Expanded(
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  if (backdrop == 0)
-                    CustomPaint(painter: CheckerPainter())
-                  else
-                    ColoredBox(
-                      color: backdrop == 1 ? Colors.black : Colors.white,
-                    ),
-                  if (backdrop == 3 && background != null)
-                    RawImage(image: background, fit: BoxFit.cover),
-                  if (logo != null)
-                    CustomPaint(painter: PatternPainter(logo!, s))
-                  else
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: SizedBox(
-                            width: 160,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.texture_rounded,
-                                  size: 64,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
-                                const SizedBox(height: 16),
-                                const Text(
-                                  'شعارك، بنمط متكرر',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Color(0xff3b3256),
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                const Text(
-                                  'استورد PNG شفاف للبدء',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Color(0xff3b3256)),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  title,
+                  dimensions,
+                  const SizedBox(height: 6),
+                  previewOptions(refresh),
+                  const SizedBox(height: 4),
+                  note,
                 ],
               ),
             ),
-          ),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: previewCanvas(166)),
+          ],
         ),
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 5,
-        children: [
-          for (final item in [(0, 'شفافة'), (1, 'سوداء'), (2, 'بيضاء')])
-            ChoiceChip(
-              label: Text(item.$2),
-              selected: backdrop == item.$1,
-              onSelected: (_) {
-                setState(() => backdrop = item.$1);
-                refresh?.call();
-              },
-            ),
-          ActionChip(
-            label: const Text('صورة'),
-            avatar: const Icon(Icons.photo_outlined, size: 16),
-            onPressed: busy ? null : () => pick(isBackground: true),
-          ),
-        ],
-      ),
-      const SizedBox(height: 8),
-      Text(
-        'خلفية المعاينة لا تدخل في التصدير',
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
-    ],
-  );
-  Widget controls() => Column(
-    children: [
-      section('01  •  الشعار', [
-        FilledButton.icon(
-          onPressed: busy ? null : () => pick(),
-          icon: const Icon(Icons.add_photo_alternate_outlined),
-          label: const Text('استيراد صورة الشعار'),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          filename ?? 'PNG • JPG • WebP',
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        const SizedBox(height: 8),
-        const Text(
-          'نحافظ على الصورة كما هي. استخدم PNG شفاف لنتيجة Overlay جاهزة.',
-          style: TextStyle(fontSize: 12),
-        ),
-        OutlinedButton.icon(
-          onPressed: logo == null || busy ? null : () => setState(autoFit),
-          icon: const Icon(Icons.auto_fix_high),
-          label: const Text('ضبط الحجم والمسافات تلقائيًا'),
-        ),
-      ]),
-      section('02  •  مساحة التصميم', [
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
+      );
+    }
+    return Column(
+      children: [
+        Row(
           children: [
-            for (final p in [
-              (1080, 1920, '9:16'),
-              (1440, 1920, '3:4'),
-              (1920, 1920, '1:1'),
-              (1920, 1080, '16:9'),
-            ])
-              ChoiceChip(
-                label: Text(p.$3),
-                selected: s.width * p.$2 == s.height * p.$1,
-                onSelected: (_) => setState(() {
-                  s.width = p.$1;
-                  s.height = p.$2;
-                  autoFit();
-                }),
-              ),
-            ActionChip(label: const Text('مخصص'), onPressed: customSize),
+            const Icon(Icons.visibility_outlined, size: 18),
+            const SizedBox(width: 8),
+            const Expanded(child: title),
+            dimensions,
           ],
         ),
         const SizedBox(height: 12),
-        OutlinedButton(
-          onPressed: () => setState(() {
-            final factor = 3840 / math.max(s.width, s.height);
-            s.width = (s.width * factor).round();
-            s.height = (s.height * factor).round();
-            autoFit();
-          }),
-          child: const Text('رفع الدقة إلى 4K'),
-        ),
-      ]),
-      section('03  •  توزيع النمط', [
-        SegmentedButton<PatternKind>(
-          segments: const [
-            ButtonSegment(value: PatternKind.grid, label: Text('شبكة')),
-            ButtonSegment(value: PatternKind.staggered, label: Text('متبادل')),
-            ButtonSegment(value: PatternKind.diagonal, label: Text('قطري')),
-          ],
-          selected: {s.kind},
-          onSelectionChanged: (v) => setState(() => s.kind = v.first),
-        ),
-        const SizedBox(height: 16),
-        slider(
-          'حجم الشعار',
-          s.scale,
-          24,
-          800,
-          (v) => s.scale = v,
-          suffix: ' px',
-        ),
-        slider('المسافة الأفقية', s.spacingX, 0, 600, (v) => s.spacingX = v),
-        slider('المسافة الرأسية', s.spacingY, 0, 600, (v) => s.spacingY = v),
-        slider(
-          'زاوية الميل',
-          s.rotation,
-          -180,
-          180,
-          (v) => s.rotation = v,
-          suffix: '°',
-        ),
-        slider(
-          'الشفافية',
-          s.opacity * 100,
-          0,
-          100,
-          (v) => s.opacity = v / 100,
-          suffix: '%',
-        ),
-        ExpansionTile(
-          title: const Text('العدد والإزاحة'),
-          tilePadding: EdgeInsets.zero,
-          children: [
-            slider(
-              'الحد الأقصى للعناصر',
-              s.limit.toDouble(),
-              1,
-              2000,
-              (v) => s.limit = v.round(),
-            ),
-            slider('إزاحة أفقية', s.offsetX, -600, 600, (v) => s.offsetX = v),
-            slider('إزاحة رأسية', s.offsetY, -600, 600, (v) => s.offsetY = v),
-          ],
-        ),
-      ]),
-      section('04  •  اللون', [
-        Wrap(
-          spacing: 8,
-          children: [
-            for (final t in [
-              (LogoTone.original, 'الأصلي'),
-              (LogoTone.pink, 'بمبي'),
-              (LogoTone.gray, 'رصاصي متدرج'),
-              (LogoTone.custom, 'مخصص'),
-            ])
-              ChoiceChip(
-                label: Text(t.$2),
-                selected: s.tone == t.$1,
-                onSelected: (_) => setState(() => s.tone = t.$1),
-              ),
-          ],
-        ),
-        if (s.tone == LogoTone.custom) ...[
-          const SizedBox(height: 12),
-          slider(
-            'أحمر',
-            s.color.r * 255,
-            0,
-            255,
-            (v) => s.color = Color.fromARGB(
-              255,
-              v.round(),
-              (s.color.g * 255).round(),
-              (s.color.b * 255).round(),
+        previewCanvas(full ? MediaQuery.sizeOf(context).height * .65 : height),
+        const SizedBox(height: 12),
+        previewOptions(refresh),
+        const SizedBox(height: 8),
+        note,
+      ],
+    );
+  }
+
+  Widget controls() => Column(
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              filename ?? 'PNG • JPG • WebP',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
-          slider(
-            'أخضر',
-            s.color.g * 255,
-            0,
-            255,
-            (v) => s.color = Color.fromARGB(
-              255,
-              (s.color.r * 255).round(),
-              v.round(),
-              (s.color.b * 255).round(),
-            ),
-          ),
-          slider(
-            'أزرق',
-            s.color.b * 255,
-            0,
-            255,
-            (v) => s.color = Color.fromARGB(
-              255,
-              (s.color.r * 255).round(),
-              (s.color.g * 255).round(),
-              v.round(),
-            ),
-          ),
-          Container(
-            height: 24,
-            decoration: BoxDecoration(
-              color: s.color,
-              borderRadius: BorderRadius.circular(8),
-            ),
+          TextButton.icon(
+            onPressed: busy ? null : () => pick(),
+            icon: const Icon(Icons.add_photo_alternate_outlined, size: 18),
+            label: const Text('استيراد صورة الشعار'),
           ),
         ],
-      ]),
-      section('05  •  إعداداتك المحفوظة', [
-        if (presets.isNotEmpty)
-          DropdownButton<String>(
-            isExpanded: true,
-            value: selectedPreset,
-            hint: const Text('اختر إعدادًا محفوظًا'),
-            items: presets.keys
-                .map(
-                  (k) => DropdownMenuItem(
-                    value: k,
-                    child: Text(k, overflow: TextOverflow.ellipsis),
-                  ),
-                )
-                .toList(),
-            onChanged: busy
-                ? null
-                : (key) {
-                    if (key != null) {
-                      try {
-                        setState(() {
-                          s = PatternSettings.fromJson(
-                            Map<String, dynamic>.from(presets[key] as Map),
-                          );
-                          selectedPreset = key;
-                        });
-                      } catch (_) {
-                        message('الإعداد المحفوظ غير صالح');
-                      }
-                    }
-                  },
-          ),
-        OutlinedButton.icon(
-          onPressed: busy ? null : savePreset,
-          icon: const Icon(Icons.bookmark_add_outlined),
-          label: const Text('حفظ إعدادات'),
+      ),
+      SizedBox(
+        width: double.infinity,
+        child: SegmentedButton<int>(
+          showSelectedIcon: false,
+          style: const ButtonStyle(visualDensity: VisualDensity.compact),
+          segments: const [
+            ButtonSegment(value: 0, label: Text('النمط')),
+            ButtonSegment(value: 1, label: Text('الشعار')),
+            ButtonSegment(value: 2, label: Text('المقاس')),
+            ButtonSegment(value: 3, label: Text('المحفوظات')),
+          ],
+          selected: {editorTab},
+          onSelectionChanged: (v) => setState(() => editorTab = v.first),
         ),
-        if (selectedPreset != null)
-          TextButton(
-            onPressed: busy
-                ? null
-                : () => task(() async {
-                    presets.remove(selectedPreset);
-                    selectedPreset = null;
-                    await (await SharedPreferences.getInstance()).setString(
-                      'presets',
-                      jsonEncode(presets),
-                    );
-                  }),
-            child: const Text('حذف الإعداد المحدد'),
+      ),
+      const SizedBox(height: 12),
+      if (editorTab == 1)
+        section('الشعار واللون', [
+          FilledButton.icon(
+            onPressed: busy ? null : () => pick(),
+            icon: const Icon(Icons.add_photo_alternate_outlined),
+            label: const Text('تغيير الشعار'),
           ),
-      ]),
+          const SizedBox(height: 8),
+          Text(
+            filename ?? 'PNG • JPG • WebP',
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'نحافظ على الصورة كما هي. استخدم PNG شفاف لنتيجة Overlay جاهزة.',
+            style: TextStyle(fontSize: 12),
+          ),
+          OutlinedButton.icon(
+            onPressed: logo == null || busy ? null : () => setState(autoFit),
+            icon: const Icon(Icons.auto_fix_high),
+            label: const Text('ضبط الحجم والمسافات تلقائيًا'),
+          ),
+        ]),
+      if (editorTab == 2)
+        section('مساحة التصميم', [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final p in [
+                (1080, 1920, '9:16'),
+                (1440, 1920, '3:4'),
+                (1920, 1920, '1:1'),
+                (1920, 1080, '16:9'),
+              ])
+                ChoiceChip(
+                  label: Text(p.$3),
+                  selected: s.width * p.$2 == s.height * p.$1,
+                  onSelected: (_) => setState(() {
+                    s.width = p.$1;
+                    s.height = p.$2;
+                    autoFit();
+                  }),
+                ),
+              ActionChip(label: const Text('مخصص'), onPressed: customSize),
+            ],
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: () => setState(() {
+              final factor = 3840 / math.max(s.width, s.height);
+              s.width = (s.width * factor).round();
+              s.height = (s.height * factor).round();
+              autoFit();
+            }),
+            child: const Text('رفع الدقة إلى 4K'),
+          ),
+        ]),
+      if (editorTab == 0)
+        section('عناصر Pattern', [
+          SegmentedButton<PatternKind>(
+            segments: const [
+              ButtonSegment(value: PatternKind.grid, label: Text('شبكة')),
+              ButtonSegment(
+                value: PatternKind.staggered,
+                label: Text('متبادل'),
+              ),
+              ButtonSegment(value: PatternKind.diagonal, label: Text('قطري')),
+            ],
+            selected: {s.kind},
+            onSelectionChanged: (v) => setState(() => s.kind = v.first),
+          ),
+          const SizedBox(height: 16),
+          slider(
+            'الشفافية',
+            s.opacity * 100,
+            0,
+            100,
+            (v) => s.opacity = v / 100,
+            suffix: '%',
+          ),
+          slider('حجم الشعار', s.scale, 24, 800, (v) {
+            final x = spacingPercentX, y = spacingPercentY;
+            s.scale = v;
+            s.spacingX = s.scale * (x / 100 - 1);
+            s.spacingY = logoHeight * (y / 100 - 1);
+          }, suffix: ' px'),
+          slider(
+            'المسافة الأفقية · الأعمدة',
+            spacingPercentX,
+            25,
+            500,
+            (v) => setSpacing(v, horizontal: true),
+            suffix: '%',
+          ),
+          slider(
+            'المسافة الرأسية · الصفوف',
+            spacingPercentY,
+            25,
+            500,
+            (v) => setSpacing(v, horizontal: false),
+            suffix: '%',
+          ),
+          Row(
+            children: [
+              Checkbox(
+                value: linkSpacing,
+                onChanged: (v) => setState(() {
+                  linkSpacing = v!;
+                  if (linkSpacing) {
+                    setSpacing(spacingPercentX, horizontal: true);
+                  }
+                }),
+              ),
+              const Expanded(
+                child: Text('ربط المسافتين', style: TextStyle(fontSize: 12)),
+              ),
+              TextButton(
+                onPressed: () => setState(() {
+                  s.spacingX = s.scale * .5;
+                  s.spacingY = logoHeight * .5;
+                }),
+                child: const Text('إعادة 150%'),
+              ),
+            ],
+          ),
+          const Text(
+            '100% تلامس • أقل تداخل • أكبر تباعد',
+            style: TextStyle(fontSize: 11),
+          ),
+          slider(
+            'زاوية الميل',
+            s.rotation,
+            -180,
+            180,
+            (v) => s.rotation = v,
+            suffix: '°',
+          ),
+          ExpansionTile(
+            title: const Text('العدد والإزاحة وتناوب الصفوف'),
+            tilePadding: EdgeInsets.zero,
+            children: [
+              slider(
+                'الحد الأقصى للعناصر',
+                s.limit.toDouble(),
+                1,
+                2000,
+                (v) => s.limit = v.round(),
+              ),
+              slider(
+                'دوران الصفوف البديلة',
+                s.alternateRotation,
+                -180,
+                180,
+                (v) => s.alternateRotation = v,
+                suffix: '°',
+              ),
+              slider(
+                'حجم الصفوف البديلة',
+                s.alternateScale * 100,
+                25,
+                150,
+                (v) => s.alternateScale = v / 100,
+                suffix: '%',
+              ),
+              slider('إزاحة أفقية', s.offsetX, -600, 600, (v) => s.offsetX = v),
+              slider('إزاحة رأسية', s.offsetY, -600, 600, (v) => s.offsetY = v),
+            ],
+          ),
+        ]),
+      if (editorTab == 1)
+        section('لون الشعار', [
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final t in [
+                (LogoTone.original, 'الأصلي'),
+                (LogoTone.gray, 'رصاصي متدرج'),
+                (LogoTone.custom, 'مخصص'),
+              ])
+                ChoiceChip(
+                  label: Text(t.$2),
+                  selected: s.tone == t.$1,
+                  onSelected: (_) => setState(() => s.tone = t.$1),
+                ),
+            ],
+          ),
+          if (s.tone == LogoTone.custom) ...[
+            const SizedBox(height: 12),
+            slider(
+              'أحمر',
+              s.color.r * 255,
+              0,
+              255,
+              (v) => s.color = Color.fromARGB(
+                255,
+                v.round(),
+                (s.color.g * 255).round(),
+                (s.color.b * 255).round(),
+              ),
+            ),
+            slider(
+              'أخضر',
+              s.color.g * 255,
+              0,
+              255,
+              (v) => s.color = Color.fromARGB(
+                255,
+                (s.color.r * 255).round(),
+                v.round(),
+                (s.color.b * 255).round(),
+              ),
+            ),
+            slider(
+              'أزرق',
+              s.color.b * 255,
+              0,
+              255,
+              (v) => s.color = Color.fromARGB(
+                255,
+                (s.color.r * 255).round(),
+                (s.color.g * 255).round(),
+                v.round(),
+              ),
+            ),
+            Container(
+              height: 24,
+              decoration: BoxDecoration(
+                color: s.color,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ],
+        ]),
+      if (editorTab == 3)
+        section('إعداداتك المحفوظة', [
+          if (presets.isNotEmpty)
+            DropdownButton<String>(
+              isExpanded: true,
+              value: selectedPreset,
+              hint: const Text('اختر إعدادًا محفوظًا'),
+              items: presets.keys
+                  .map(
+                    (k) => DropdownMenuItem(
+                      value: k,
+                      child: Text(k, overflow: TextOverflow.ellipsis),
+                    ),
+                  )
+                  .toList(),
+              onChanged: busy
+                  ? null
+                  : (key) {
+                      if (key != null) {
+                        try {
+                          setState(() {
+                            s = PatternSettings.fromJson(
+                              Map<String, dynamic>.from(presets[key] as Map),
+                            );
+                            selectedPreset = key;
+                          });
+                        } catch (_) {
+                          message('الإعداد المحفوظ غير صالح');
+                        }
+                      }
+                    },
+            ),
+          OutlinedButton.icon(
+            onPressed: busy ? null : savePreset,
+            icon: const Icon(Icons.bookmark_add_outlined),
+            label: const Text('حفظ إعدادات'),
+          ),
+          if (selectedPreset != null)
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () => task(() async {
+                      presets.remove(selectedPreset);
+                      selectedPreset = null;
+                      await (await SharedPreferences.getInstance()).setString(
+                        'presets',
+                        jsonEncode(presets),
+                      );
+                    }),
+              child: const Text('حذف الإعداد المحدد'),
+            ),
+        ]),
     ],
   );
   @override
@@ -706,6 +851,37 @@ class _EditorState extends State<Editor> {
         ],
       ),
       actions: [
+        IconButton(
+          onPressed: () => showDialog<void>(
+            context: context,
+            builder: (c) => StatefulBuilder(
+              builder: (c, update) => Dialog.fullscreen(
+                child: Scaffold(
+                  appBar: AppBar(title: const Text('معاينة النمط')),
+                  body: SingleChildScrollView(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: preview(full: true, refresh: () => update(() {})),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          icon: const Icon(Icons.fullscreen),
+          tooltip: 'معاينة',
+        ),
+
+        IconButton(
+          tooltip: 'عن التطبيق',
+          icon: const Icon(Icons.info_outline),
+          onPressed: () => showAboutDialog(
+            context: context,
+            applicationName: 'Watermark Pattern Maker',
+            applicationVersion: '1.1.0',
+            applicationLegalese: 'Juba Tech • معالجة محلية وتصدير PNG شفاف',
+          ),
+        ),
         IconButton(
           tooltip: 'تبديل المظهر',
           onPressed: widget.onTheme,
@@ -747,31 +923,8 @@ class _EditorState extends State<Editor> {
                 children: [
                   preview(
                     height: wide
-                        ? 350
-                        : (constraints.maxHeight * .27).clamp(110, 240),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => showDialog<void>(
-                      context: context,
-                      builder: (c) => StatefulBuilder(
-                        builder: (c, update) => Dialog.fullscreen(
-                          child: Scaffold(
-                            appBar: AppBar(title: const Text('معاينة النمط')),
-                            body: SingleChildScrollView(
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: preview(
-                                  full: true,
-                                  refresh: () => update(() {}),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    icon: const Icon(Icons.fullscreen),
-                    label: const Text('معاينة'),
+                        ? (constraints.maxHeight - 240).clamp(240, 700)
+                        : (constraints.maxHeight * .23).clamp(90, 180),
                   ),
                 ],
               ),
@@ -799,6 +952,12 @@ class _EditorState extends State<Editor> {
                   ],
                 ),
               ),
+            );
+          }
+          if (constraints.maxHeight < 500) {
+            return ListView(
+              padding: const EdgeInsets.all(12),
+              children: [previewCard, controls()],
             );
           }
           return Padding(
@@ -834,7 +993,7 @@ class CheckerPainter extends CustomPainter {
       Offset.zero & size,
       Paint()..color = const Color(0xfff1eff6),
     );
-    final paint = Paint()..color = const Color(0xffd9d5e3);
+    final paint = Paint()..color = const Color(0xffd4d7da);
     for (var y = 0; y < size.height / 14; y++) {
       for (var x = 0; x < size.width / 14; x++) {
         if ((x + y).isEven) {

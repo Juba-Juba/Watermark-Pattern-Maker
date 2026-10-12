@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 
 enum PatternKind { grid, staggered, diagonal }
 
-enum LogoTone { original, pink, gray, custom }
+enum LogoTone { original, gray, custom }
 
 class PatternSettings {
   int width = 1080, height = 1920, limit = 1000;
@@ -15,10 +15,12 @@ class PatternSettings {
       rotation = 30,
       opacity = .35,
       offsetX = 0,
-      offsetY = 0;
+      offsetY = 0,
+      alternateRotation = 0,
+      alternateScale = 1;
   PatternKind kind = PatternKind.staggered;
-  LogoTone tone = LogoTone.original;
-  Color color = const Color(0xffe879b9);
+  LogoTone tone = LogoTone.gray;
+  Color color = const Color(0xff91979e);
   Map<String, dynamic> toJson() => {
     'width': width,
     'height': height,
@@ -31,7 +33,9 @@ class PatternSettings {
     'offsetX': offsetX,
     'offsetY': offsetY,
     'kind': kind.index,
-    'tone': tone.index,
+    'toneName': tone.name,
+    'alternateRotation': alternateRotation,
+    'alternateScale': alternateScale,
     'color': color.toARGB32(),
   };
   static PatternSettings fromJson(Map<String, dynamic> j) {
@@ -40,14 +44,31 @@ class PatternSettings {
     s.height = (j['height'] as num).toInt().clamp(64, 4096);
     s.limit = (j['limit'] as num).toInt().clamp(1, 2000);
     s.scale = (j['scale'] as num).toDouble().clamp(24, 800);
-    s.spacingX = (j['spacingX'] as num).toDouble().clamp(0, 600);
-    s.spacingY = (j['spacingY'] as num).toDouble().clamp(0, 600);
+    s.spacingX = (j['spacingX'] as num).toDouble().clamp(-3000, 3000);
+    s.spacingY = (j['spacingY'] as num).toDouble().clamp(-3000, 3000);
     s.rotation = (j['rotation'] as num).toDouble().clamp(-180, 180);
     s.opacity = (j['opacity'] as num).toDouble().clamp(0, 1);
     s.offsetX = (j['offsetX'] as num).toDouble().clamp(-600, 600);
     s.offsetY = (j['offsetY'] as num).toDouble().clamp(-600, 600);
     s.kind = PatternKind.values[(j['kind'] as int).clamp(0, 2)];
-    s.tone = LogoTone.values[(j['tone'] as int).clamp(0, 3)];
+    // Migrate old pink presets to gray without shifting the original enum IDs.
+    s.tone = j['toneName'] != null
+        ? LogoTone.values.firstWhere(
+            (v) => v.name == j['toneName'],
+            orElse: () => LogoTone.gray,
+          )
+        : switch (j['tone']) {
+            0 => LogoTone.original,
+            3 => LogoTone.custom,
+            _ => LogoTone.gray,
+          };
+    s.alternateRotation = (j['alternateRotation'] as num? ?? 0)
+        .toDouble()
+        .clamp(-180, 180);
+    s.alternateScale = (j['alternateScale'] as num? ?? 1).toDouble().clamp(
+      .25,
+      1.5,
+    );
     s.color = Color(j['color'] as int);
     return s;
   }
@@ -63,8 +84,9 @@ class PatternPainter extends CustomPainter {
     canvas.clipRect(Offset.zero & size);
     canvas.scale(size.width / s.width, size.height / s.height);
     final w = s.scale, h = w * logo.height / logo.width;
-    final dx = w + s.spacingX, dy = h + s.spacingY;
-    final radius = math.sqrt(w * w + h * h) / 2;
+    final dx = math.max(w * .25, w + s.spacingX),
+        dy = math.max(h * .25, h + s.spacingY);
+    final radius = math.sqrt(w * w + h * h) / 2 * math.max(1, s.alternateScale);
     final source = Rect.fromLTWH(
       0,
       0,
@@ -77,11 +99,7 @@ class PatternPainter extends CustomPainter {
       ..color = Color.fromRGBO(255, 255, 255, s.opacity);
     if (s.tone != LogoTone.original) {
       paint.colorFilter = ColorFilter.mode(
-        s.tone == LogoTone.pink
-            ? const Color(0xffec80b6)
-            : s.tone == LogoTone.gray
-            ? const Color(0xff999da8)
-            : s.color,
+        s.tone == LogoTone.gray ? const Color(0xff999da8) : s.color,
         BlendMode.srcIn,
       );
     }
@@ -107,7 +125,10 @@ class PatternPainter extends CustomPainter {
         }
         canvas.save();
         canvas.translate(x, y);
-        canvas.rotate(s.rotation * math.pi / 180);
+        canvas.rotate(
+          (s.rotation + (row.isOdd ? s.alternateRotation : 0)) * math.pi / 180,
+        );
+        if (row.isOdd) canvas.scale(s.alternateScale);
         canvas.drawImageRect(logo, source, target, paint);
         if (s.tone == LogoTone.gray) {
           canvas.saveLayer(target, Paint()..blendMode = BlendMode.srcATop);

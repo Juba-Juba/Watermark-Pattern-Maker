@@ -3,18 +3,23 @@ import 'package:image/image.dart' as img;
 
 /// Keeps every nontransparent pixel intact; trims only empty alpha margins.
 Uint8List normalizeLogo(Uint8List bytes) {
-  var image = img.decodeImage(bytes);
-  if (image == null) {
+  final decoder = img.findDecoderForData(bytes);
+  final info = decoder?.startDecode(bytes);
+  if (info == null) {
     throw const FormatException('صورة غير مدعومة أو تالفة');
   }
-  image = img.bakeOrientation(image).convert(numChannels: 4);
-  if (image.width > 8192 ||
-      image.height > 8192 ||
-      image.width * image.height > 20000000) {
+  if (info.width > 8192 ||
+      info.height > 8192 ||
+      info.width * info.height > 20000000) {
     throw const FormatException(
       'اختر صورة أقل من 20 ميجابكسل وبأبعاد لا تتجاوز 8192',
     );
   }
+  var image = decoder!.decodeFrame(0);
+  if (image == null) {
+    throw const FormatException('تعذر قراءة الصورة');
+  }
+  image = img.bakeOrientation(image).convert(numChannels: 4);
   var left = image.width, top = image.height, right = -1, bottom = -1;
   for (final p in image) {
     if (p.a == 0) {

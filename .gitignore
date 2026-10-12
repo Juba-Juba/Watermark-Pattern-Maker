@@ -13,3 +13,5 @@ android/local.properties
 .flutter-plugins
 .flutter-plugins-dependencies
 flutter_*.log
+
+android/.kotlin/

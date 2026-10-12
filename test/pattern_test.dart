@@ -104,6 +104,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(exported, isNotNull);
       expect(img.decodePng(exported!)!.any((p) => p.a == 0), true);
+      await tester.tap(find.text('المحفوظات'));
+      await tester.pumpAndSettle();
       await tester.scrollUntilVisible(
         find.text('حفظ إعدادات'),
         400,
@@ -125,6 +127,14 @@ void main() {
     expect(result.height, 40);
     final p = result.getPixel(5, 15);
     expect([p.r, p.g, p.b, p.a], [50, 60, 70, 128]);
+  });
+  test('Lossless WebP imports with original alpha and colors', () {
+    final image = img.decodePng(
+      normalizeLogo(File('test/fixtures/logo.webp').readAsBytesSync()),
+    )!;
+    expect([image.width, image.height], [16, 10]);
+    final p = image.getPixel(0, 0);
+    expect([p.r, p.g, p.b, p.a], [210, 80, 145, 180]);
   });
   test('JPEG import preserves opaque background rather than removing it', () {
     final source = img.Image(width: 30, height: 20);
@@ -150,6 +160,13 @@ void main() {
       throwsFormatException,
     );
   });
+  test('Reject oversized image from header before pixel decoding', () {
+    final source = img.Image(width: 9000, height: 1, numChannels: 4);
+    expect(
+      () => normalizeLogo(Uint8List.fromList(img.encodePng(source))),
+      throwsFormatException,
+    );
+  });
   test('Preset roundtrip and safe validation', () {
     final s = PatternSettings()
       ..width = 3840
@@ -165,6 +182,102 @@ void main() {
     expect(restored.width, 4096);
     expect(restored.opacity, 0);
   });
+  test('Old pink presets migrate to gray; alternating rows persist', () {
+    final values = PatternSettings().toJson()..remove('toneName');
+    values['tone'] = 1;
+    expect(PatternSettings.fromJson(values).tone, LogoTone.gray);
+    final settings = PatternSettings()
+      ..alternateRotation = 90
+      ..alternateScale = .6
+      ..spacingX = -40;
+    expect(
+      PatternSettings.fromJson(settings.toJson()).toJson(),
+      settings.toJson(),
+    );
+  });
+  testWidgets(
+    'Numeric spacing and opacity update the actual painter independently',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = const Size(1200, 1100);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(const WatermarkApp());
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.text('استيراد صورة الشعار'));
+        for (var i = 0; i < 30; i++) {
+          await Future<void>.delayed(const Duration(milliseconds: 100));
+          await tester.pump();
+          if (find.text('test-logo.png').evaluate().isNotEmpty) break;
+        }
+      });
+      await tester.pumpAndSettle();
+      PatternSettings current() => tester
+          .widgetList<CustomPaint>(find.byType(CustomPaint))
+          .map((w) => w.painter)
+          .whereType<PatternPainter>()
+          .first
+          .settings;
+      final initialY = current().spacingY;
+      await tester.enterText(
+        find.byKey(const ValueKey('number-المسافة الأفقية · الأعمدة')),
+        '250',
+      );
+      await tester.pump();
+      expect(current().spacingX, closeTo(current().scale * 1.5, .01));
+      expect(current().spacingY, initialY);
+      await tester.enterText(
+        find.byKey(const ValueKey('number-المسافة الرأسية · الصفوف')),
+        '75',
+      );
+      await tester.pump();
+      expect(current().spacingY, closeTo(-current().scale * .25, .01));
+      await tester.enterText(
+        find.byKey(const ValueKey('number-الشفافية')),
+        '18',
+      );
+      await tester.pump();
+      expect(current().opacity, .18);
+      expect(current().tone, LogoTone.gray);
+      expect(find.text('بمبي'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  test(
+    'Column and row spacing change repetition along their own axes',
+    () async {
+      final logo = await logoImage();
+      final settings = PatternSettings()
+        ..width = 320
+        ..height = 240
+        ..scale = 40
+        ..kind = PatternKind.grid
+        ..rotation = 0
+        ..tone = LogoTone.original
+        ..opacity = 1
+        ..spacingX = 20
+        ..spacingY = 20;
+      final first = img.decodePng(await exportPattern(logo, settings))!;
+      settings.spacingX = 100;
+      final second = img.decodePng(await exportPattern(logo, settings))!;
+      int horizontal(img.Image image) => List.generate(
+        320,
+        (x) => image.getPixel(x, 0).a,
+      ).where((a) => a > 0).length;
+      int vertical(img.Image image) => List.generate(
+        240,
+        (y) => image.getPixel(0, y).a,
+      ).where((a) => a > 0).length;
+      expect(horizontal(second), lessThan(horizontal(first)));
+      expect(vertical(second), vertical(first));
+      settings.spacingY = 100;
+      final third = img.decodePng(await exportPattern(logo, settings))!;
+      expect(vertical(third), lessThan(vertical(second)));
+      logo.dispose();
+    },
+  );
   for (final kind in PatternKind.values) {
     test(
       'Export ${kind.name} contains actual transparency and repeated pixels',
@@ -273,6 +386,8 @@ void main() {
       await tester.tap(find.byTooltip('تبديل المظهر'));
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+      await tester.tap(find.text('المحفوظات'));
+      await tester.pumpAndSettle();
       final buttons = find.text('حفظ إعدادات');
       await tester.scrollUntilVisible(
         buttons,
@@ -283,4 +398,30 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+  testWidgets('Landscape phone remains scrollable without overflow', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(780, 390);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    await tester.pumpWidget(const WatermarkApp());
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    await Scrollable.ensureVisible(
+      tester.element(find.text('المحفوظات')),
+      alignment: .4,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('المحفوظات'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('حفظ إعدادات'),
+      400,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }
