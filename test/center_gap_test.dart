@@ -32,6 +32,8 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const WatermarkApp());
     await tester.pumpAndSettle();
+    expect(find.text('حجم الفجوة'), findsOneWidget);
+    expect(find.text('شفافية الفجوة'), findsOneWidget);
     final toggle = find.widgetWithText(SwitchListTile, 'فجوة في المنتصف');
     await tester.ensureVisible(toggle);
     await tester.tap(toggle);

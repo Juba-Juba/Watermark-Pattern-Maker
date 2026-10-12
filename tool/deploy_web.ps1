@@ -5,6 +5,7 @@ Push-Location $project
 try {
     & $Flutter build web --release --base-href / --no-web-resources-cdn
     if ($LASTEXITCODE -ne 0) { throw 'Web build failed' }
+    & (Join-Path $PSScriptRoot 'prepare_web.ps1')
     $target = Join-Path $project 'output\pages'
     if (-not (Test-Path (Join-Path $target '.git'))) {
         New-Item -ItemType Directory -Path $target -Force | Out-Null

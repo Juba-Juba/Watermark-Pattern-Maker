@@ -352,7 +352,7 @@ class _EditorState extends State<Editor> {
   }
 
   Widget section(String title, List<Widget> children) {
-    final expanded = title == 'عناصر Pattern';
+    final expanded = title == 'عناصر Pattern' || title == 'فجوة وسط التصميم';
     return Card(
       margin: const EdgeInsets.only(bottom: 14),
       child: expanded
@@ -568,6 +568,29 @@ class _EditorState extends State<Editor> {
           onChanged: () => setState(() {}),
         ),
       if (!frameMode) ...[
+        section('فجوة وسط التصميم', [
+          SwitchListTile.adaptive(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('فجوة في المنتصف'),
+            subtitle: const Text(
+              'إخفاء العلامات تدريجيًا في الوسط بخلفية شفافة',
+            ),
+            value: s.centerGap,
+            onChanged: (v) => setState(() => s.centerGap = v),
+          ),
+          slider('حجم الفجوة', s.gapSize * 100, 10, 150, (v) {
+            s.gapSize = v / 100;
+            s.centerGap = true;
+          }, suffix: '%'),
+          slider('شفافية الفجوة', s.gapTransparency * 100, 0, 100, (v) {
+            s.gapTransparency = v / 100;
+            s.centerGap = true;
+          }, suffix: '%'),
+          const Text(
+            '100%: وسط شفاف تمامًا · 0%: العلامات ظاهرة بالكامل',
+            style: TextStyle(fontSize: 11),
+          ),
+        ]),
         section('عناصر Pattern', [
           SegmentedButton<PatternKind>(
             segments: const [
@@ -596,37 +619,6 @@ class _EditorState extends State<Editor> {
             s.spacingX = footprint.width * (x / 100 - 1);
             s.spacingY = footprint.height * (y / 100 - 1);
           }, suffix: ' px'),
-          SwitchListTile.adaptive(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('فجوة في المنتصف'),
-            subtitle: const Text(
-              'إخفاء العلامات تدريجيًا في الوسط بخلفية شفافة',
-            ),
-            value: s.centerGap,
-            onChanged: (v) => setState(() => s.centerGap = v),
-          ),
-          if (s.centerGap) ...[
-            slider(
-              'حجم الفجوة',
-              s.gapSize * 100,
-              10,
-              150,
-              (v) => s.gapSize = v / 100,
-              suffix: '%',
-            ),
-            slider(
-              'شفافية الفجوة',
-              s.gapTransparency * 100,
-              0,
-              100,
-              (v) => s.gapTransparency = v / 100,
-              suffix: '%',
-            ),
-            const Text(
-              '100%: وسط شفاف تمامًا · 0%: العلامات ظاهرة بالكامل',
-              style: TextStyle(fontSize: 11),
-            ),
-          ],
           if (logo != null && s.scale > logo!.width)
             const Text(
               'التكبير أكبر من دقة اللوجو الأصلية؛ استخدم PNG أعلى دقة لحدة أفضل.',
@@ -891,172 +883,159 @@ class _EditorState extends State<Editor> {
     ],
   );
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      bottom: PreferredSize(
-        preferredSize: const Size.fromHeight(52),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-          child: SizedBox(
-            width: double.infinity,
-            child: SegmentedButton<bool>(
-              showSelectedIcon: false,
-              segments: const [
-                ButtonSegment(
-                  value: false,
-                  icon: Icon(Icons.texture),
-                  label: Text('العلامة المائية'),
+  Widget build(BuildContext context) => DefaultTabController(
+    length: 2,
+    child: Scaffold(
+      appBar: AppBar(
+        bottom: TabBar(
+          onTap: (index) => setState(() => frameMode = index == 1),
+          tabs: const [
+            Tab(icon: Icon(Icons.texture), text: 'العلامة المائية'),
+            Tab(icon: Icon(Icons.crop_square), text: 'الفريم'),
+          ],
+        ),
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Watermark',
+              style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
+            ),
+            Text(
+              'WEB • 1.3.1',
+              style: TextStyle(fontSize: 10, letterSpacing: 2),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            onPressed: () => showDialog<void>(
+              context: context,
+              builder: (c) => StatefulBuilder(
+                builder: (c, update) => Dialog.fullscreen(
+                  child: Scaffold(
+                    appBar: AppBar(title: const Text('معاينة النمط')),
+                    body: SingleChildScrollView(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: preview(
+                          full: true,
+                          refresh: () => update(() {}),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
-                ButtonSegment(
-                  value: true,
-                  icon: Icon(Icons.crop_square),
-                  label: Text('الفريم'),
-                ),
-              ],
-              selected: {frameMode},
-              onSelectionChanged: (v) => setState(() => frameMode = v.first),
+              ),
+            ),
+            icon: const Icon(Icons.fullscreen),
+            tooltip: 'معاينة',
+          ),
+
+          IconButton(
+            tooltip: 'عن التطبيق',
+            icon: const Icon(Icons.info_outline),
+            onPressed: () => showAboutDialog(
+              context: context,
+              applicationName: 'Watermark Pattern Maker',
+              applicationVersion: '1.2.0',
+              applicationLegalese: 'Juba Tech • معالجة محلية وتصدير PNG شفاف',
             ),
           ),
-        ),
-      ),
-      title: const Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Watermark',
-            style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
-          ),
-          Text(
-            'PATTERN MAKER',
-            style: TextStyle(fontSize: 10, letterSpacing: 2),
+          IconButton(
+            tooltip: 'تبديل المظهر',
+            onPressed: widget.onTheme,
+            icon: const Icon(Icons.brightness_6_outlined),
           ),
         ],
       ),
-      actions: [
-        IconButton(
-          onPressed: () => showDialog<void>(
-            context: context,
-            builder: (c) => StatefulBuilder(
-              builder: (c, update) => Dialog.fullscreen(
-                child: Scaffold(
-                  appBar: AppBar(title: const Text('معاينة النمط')),
-                  body: SingleChildScrollView(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: preview(full: true, refresh: () => update(() {})),
-                    ),
-                  ),
-                ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
+          child: FilledButton.icon(
+            onPressed: (!frameMode && logo == null) || busy ? null : export,
+            icon: busy
+                ? const SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.file_download_outlined),
+            label: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Text(
+                busy
+                    ? 'جاري المعالجة…'
+                    : 'تصدير ${frameMode ? 'فريم' : 'PNG'} شفاف  •  $canvasWidth × $canvasHeight',
               ),
-            ),
-          ),
-          icon: const Icon(Icons.fullscreen),
-          tooltip: 'معاينة',
-        ),
-
-        IconButton(
-          tooltip: 'عن التطبيق',
-          icon: const Icon(Icons.info_outline),
-          onPressed: () => showAboutDialog(
-            context: context,
-            applicationName: 'Watermark Pattern Maker',
-            applicationVersion: '1.2.0',
-            applicationLegalese: 'Juba Tech • معالجة محلية وتصدير PNG شفاف',
-          ),
-        ),
-        IconButton(
-          tooltip: 'تبديل المظهر',
-          onPressed: widget.onTheme,
-          icon: const Icon(Icons.brightness_6_outlined),
-        ),
-      ],
-    ),
-    bottomNavigationBar: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-        child: FilledButton.icon(
-          onPressed: (!frameMode && logo == null) || busy ? null : export,
-          icon: busy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Icon(Icons.file_download_outlined),
-          label: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Text(
-              busy
-                  ? 'جاري المعالجة…'
-                  : 'تصدير ${frameMode ? 'فريم' : 'PNG'} شفاف  •  $canvasWidth × $canvasHeight',
             ),
           ),
         ),
       ),
-    ),
-    body: AbsorbPointer(
-      absorbing: busy,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final wide = constraints.maxWidth > 850;
-          final previewCard = Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                children: [
-                  preview(
-                    height: wide
-                        ? (constraints.maxHeight - 240).clamp(240, 700)
-                        : (constraints.maxHeight * .23).clamp(90, 180),
-                  ),
-                ],
-              ),
-            ),
-          );
-          if (wide) {
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1300),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      body: AbsorbPointer(
+        absorbing: busy,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth > 850;
+            final previewCard = Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
                   children: [
-                    Expanded(
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
-                        child: controls(),
-                      ),
-                    ),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: previewCard,
-                      ),
+                    preview(
+                      height: wide
+                          ? (constraints.maxHeight - 240).clamp(240, 700)
+                          : (constraints.maxHeight * .23).clamp(90, 180),
                     ),
                   ],
                 ),
               ),
             );
-          }
-          if (constraints.maxHeight < 500) {
-            return ListView(
-              padding: const EdgeInsets.all(12),
-              children: [previewCard, controls()],
-            );
-          }
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
-            child: Column(
-              children: [
-                previewCard,
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(top: 10, bottom: 16),
-                    child: controls(),
+            if (wide) {
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1300),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: SingleChildScrollView(
+                          padding: const EdgeInsets.all(20),
+                          child: controls(),
+                        ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.all(20),
+                          child: previewCard,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-          );
-        },
+              );
+            }
+            if (constraints.maxHeight < 500) {
+              return ListView(
+                padding: const EdgeInsets.all(12),
+                children: [previewCard, controls()],
+              );
+            }
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 0),
+              child: Column(
+                children: [
+                  previewCard,
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.only(top: 10, bottom: 16),
+                      child: controls(),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     ),
   );

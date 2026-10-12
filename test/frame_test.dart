@@ -198,12 +198,17 @@ void main() {
       await tester.tap(find.text('الفريم'));
       await tester.pumpAndSettle();
       if (size.height < 500) {
-        await tester.scrollUntilVisible(find.text('مقاس الفريم'), 100, scrollable: find.byType(Scrollable).first);
+        await tester.scrollUntilVisible(
+          find.text('مقاس الفريم'),
+          100,
+          scrollable: find.byType(Scrollable).first,
+        );
         await tester.pumpAndSettle();
       }
       expect(find.text('مقاس الفريم'), findsOneWidget);
       expect(find.text('اختر تصميم الفريم'), findsOneWidget);
-      expect(find.byType(SegmentedButton<bool>), findsOneWidget);
+      expect(find.byType(TabBar), findsOneWidget);
+      expect(tester.widget<TabBar>(find.byType(TabBar)).tabs.length, 2);
       expect(tester.takeException(), isNull);
       await tester.tap(find.byTooltip('تبديل المظهر'));
       await tester.pumpAndSettle();
