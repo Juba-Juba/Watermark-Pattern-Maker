@@ -14,6 +14,136 @@ import 'package:image_picker_platform_interface/image_picker_platform_interface.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
+    'Side marks export two original-color logos with shared alpha and gaps',
+    () async {
+      final logo = await logoImage();
+      final s = FrameSettings()
+        ..width = 320
+        ..height = 400
+        ..style = FrameStyle.minimal
+        ..position = FramePosition.sideMarks
+        ..logoOpacity = .5
+        ..gap = 8
+        ..gapFeather = 10;
+      final positions = frameLogoLayouts(s, logo.width / logo.height);
+      expect(positions, hasLength(2));
+      expect(positions[0].logoRect.center.dy, lessThan(200));
+      expect(positions[1].logoRect.center.dy, greaterThan(200));
+      expect(positions[0].logoRect.left, closeTo(0, .001));
+      expect(positions[1].logoRect.right, closeTo(320, .001));
+      final output = img.decodePng(await exportFrame(s, logo: logo))!;
+      for (final layout in positions) {
+        final c = layout.logoRect.center;
+        final p = output.getPixel(c.dx.floor(), c.dy.floor());
+        expect(p.a, closeTo(128, 1));
+        expect(p.r, closeTo(20, 2));
+        expect(p.g, closeTo(100, 2));
+        expect(p.b, closeTo(210, 2));
+        final y = layout.logoRect.bottom.ceil() + 3;
+        final x = c.dx < 160 ? 2 : 317;
+        expect(output.getPixel(x, y).a, 0);
+      }
+      expect(output.getPixel(160, 200).a, 0);
+      Directory('output/qa').createSync(recursive: true);
+      File('output/qa/side-marks.png').writeAsBytesSync(img.encodePng(output));
+      s.showLogo = false;
+      final hidden = img.decodePng(await exportFrame(s, logo: logo))!;
+      expect(hidden.getPixel(2, 152).a, greaterThan(0));
+      logo.dispose();
+    },
+  );
+  test(
+    'Duplicate shares size and alpha, moves independently and never doubles same position',
+    () async {
+      final logo = await logoImage();
+      final s = FrameSettings()
+        ..width = 320
+        ..height = 400
+        ..position = FramePosition.bottom
+        ..duplicateLogo = true
+        ..duplicatePosition = FramePosition.top
+        ..logoOpacity = .25;
+      final before = FramePainter(s, logo: logo);
+      final positions = frameLogoLayouts(s, logo.width / logo.height);
+      expect(positions, hasLength(2));
+      expect(
+        positions[0].logoRect.width,
+        closeTo(positions[1].logoRect.width, .0001),
+      );
+      expect(
+        positions[0].logoRect.height,
+        closeTo(positions[1].logoRect.height, .0001),
+      );
+      final output = img.decodePng(await exportFrame(s, logo: logo))!;
+      for (final layout in positions) {
+        final c = layout.logoRect.center;
+        expect(output.getPixel(c.dx.floor(), c.dy.floor()).a, closeTo(64, 1));
+      }
+      s.duplicatePosition = FramePosition.bottom;
+      expect(FramePainter(s, logo: logo).shouldRepaint(before), isTrue);
+      expect(frameLogoLayouts(s, 2), hasLength(1));
+      final same = img.decodePng(await exportFrame(s, logo: logo))!;
+      final c = positions[0].logoRect.center;
+      expect(same.getPixel(c.dx.floor(), c.dy.floor()).a, closeTo(64, 1));
+      final enabled = FramePainter(s, logo: logo);
+      s.duplicateLogo = false;
+      expect(FramePainter(s, logo: logo).shouldRepaint(enabled), isTrue);
+      logo.dispose();
+    },
+  );
+  testWidgets(
+    'Duplicate reveals only its position selector; side preset needs no toggle',
+    (tester) async {
+      final s = FrameSettings();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: StatefulBuilder(
+                builder: (context, refresh) => FrameControls(
+                  settings: s,
+                  hasLogo: true,
+                  onChanged: () => refresh(() {}),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      final toggle = find.byKey(const ValueKey('duplicate-logo'));
+      expect(
+        find.byKey(const ValueKey('duplicate-logo-positions')),
+        findsNothing,
+      );
+      await tester.ensureVisible(toggle);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(s.duplicateLogo, isTrue);
+      expect(
+        find.byKey(const ValueKey('duplicate-logo-positions')),
+        findsOneWidget,
+      );
+      final top = find.byKey(const ValueKey('duplicate-position-topLeft'));
+      await tester.ensureVisible(top);
+      await tester.tap(top);
+      await tester.pumpAndSettle();
+      expect(s.duplicatePosition, FramePosition.topLeft);
+      expect(find.byKey(const ValueKey('frame-ظهور اللوجو')), findsOneWidget);
+      final sides = find.text('علامات جانبية');
+      await tester.ensureVisible(sides);
+      await tester.tap(sides);
+      await tester.pumpAndSettle();
+      expect(s.position, FramePosition.sideMarks);
+      expect(
+        find.byKey(const ValueKey('duplicate-logo-positions')),
+        findsNothing,
+      );
+      expect(toggle, findsNothing);
+      expect(frameLogoLayouts(s, 2), hasLength(2));
+      expect(tester.takeException(), isNull);
+    },
+  );
+  test(
     'Default frame touches canvas edges and moving inset creates a real margin',
     () async {
       final s = FrameSettings()

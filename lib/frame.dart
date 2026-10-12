@@ -30,6 +30,7 @@ enum FramePosition {
   bottomLeft,
   bottom,
   bottomRight,
+  sideMarks,
 }
 
 const frameStyleNames = [
@@ -58,6 +59,7 @@ const framePositionNames = [
   'أسفل يسار',
   'أسفل الوسط',
   'أسفل يمين',
+  'علامات جانبية',
 ];
 
 class FrameSettings {
@@ -76,6 +78,8 @@ class FrameSettings {
   double gapFeather = 36;
   double repeatScale = .12, repeatSpacing = .03;
   bool showLogo = true;
+  bool duplicateLogo = false;
+  FramePosition duplicatePosition = FramePosition.top;
 }
 
 class FrameLayout {
@@ -88,7 +92,12 @@ class FrameLayout {
     this.stroke,
     this.radius,
   );
-  factory FrameLayout.calculate(FrameSettings s, double? aspect) {
+  factory FrameLayout.calculate(
+    FrameSettings s,
+    double? aspect, {
+    FramePosition? position,
+    bool secondSide = false,
+  }) {
     final shortest = math.min(s.width, s.height).toDouble();
     final stroke = s.stroke.clamp(1.0, shortest * .08);
     final thickOutline =
@@ -111,10 +120,14 @@ class FrameLayout {
       border.width * .25,
       math.max(actualW / 2 + s.gap, s.radius),
     );
-    final anchor = switch (s.position) {
+    final anchor = switch (position ?? s.position) {
       FramePosition.topLeft => Offset(border.left + cornerOffset, border.top),
       FramePosition.top => border.topCenter,
       FramePosition.topRight => Offset(border.right - cornerOffset, border.top),
+      FramePosition.sideMarks => Offset(
+        secondSide ? border.right : border.left,
+        border.top + border.height * (secondSide ? .62 : .38),
+      ),
       FramePosition.left => border.centerLeft,
       FramePosition.right => border.centerRight,
       FramePosition.bottomLeft => Offset(
@@ -150,6 +163,20 @@ class FrameLayout {
   }
 }
 
+// All copies use the same image and size/alpha/gap settings. Equal positions
+// are deduplicated so a second copy cannot accidentally darken the original.
+List<FrameLayout> frameLogoLayouts(FrameSettings s, double? aspect) {
+  final first = FrameLayout.calculate(s, aspect);
+  if (s.position == FramePosition.sideMarks) {
+    return [first, FrameLayout.calculate(s, aspect, secondSide: true)];
+  }
+  if (!s.duplicateLogo || s.duplicatePosition == s.position) return [first];
+  return [
+    first,
+    FrameLayout.calculate(s, aspect, position: s.duplicatePosition),
+  ];
+}
+
 class FramePainter extends CustomPainter {
   final FrameSettings settings;
   final ui.Image? logo;
@@ -160,6 +187,8 @@ class FramePainter extends CustomPainter {
         settings.height,
         settings.style,
         settings.position,
+        settings.duplicateLogo,
+        settings.duplicatePosition,
         settings.color,
         settings.stroke,
         settings.inset,
@@ -178,6 +207,10 @@ class FramePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = settings;
     final layout = FrameLayout.calculate(
+      s,
+      logo == null ? null : logo!.width / logo!.height,
+    );
+    final placements = frameLogoLayouts(
       s,
       logo == null ? null : logo!.width / logo!.height,
     );
@@ -207,16 +240,21 @@ class FramePainter extends CustomPainter {
       canvas.save();
     }
     if (logo != null && s.showLogo && !softGap) {
-      final allowed = Path.combine(
-        PathOperation.difference,
-        Path()..addRect(
-          Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
-        ),
-        Path()..addRRect(
-          RRect.fromRectAndRadius(layout.gapRect, const Radius.circular(8)),
-        ),
-      );
-      canvas.clipPath(allowed);
+      for (final placement in placements) {
+        final allowed = Path.combine(
+          PathOperation.difference,
+          Path()..addRect(
+            Rect.fromLTWH(0, 0, s.width.toDouble(), s.height.toDouble()),
+          ),
+          Path()..addRRect(
+            RRect.fromRectAndRadius(
+              placement.gapRect,
+              const Radius.circular(8),
+            ),
+          ),
+        );
+        canvas.clipPath(allowed);
+      }
     }
     void outline(Rect rect, double radius) => canvas.drawRRect(
       RRect.fromRectAndRadius(rect, Radius.circular(radius)),
@@ -346,18 +384,24 @@ class FramePainter extends CustomPainter {
       case FrameStyle.logoRepeat:
         break; // Painted separately without a border or a single-logo cutout.
     }
-    if (softGap) _eraseSoftGap(canvas, layout.gapRect, s.gapFeather);
+    if (softGap) {
+      for (final placement in placements) {
+        _eraseSoftGap(canvas, placement.gapRect, s.gapFeather);
+      }
+    }
     canvas.restore();
     if (logo != null && s.showLogo) {
-      canvas.drawImageRect(
-        logo!,
-        Rect.fromLTWH(0, 0, logo!.width.toDouble(), logo!.height.toDouble()),
-        layout.logoRect,
-        Paint()
-          ..filterQuality = FilterQuality.high
-          ..isAntiAlias = true
-          ..color = Color.fromRGBO(255, 255, 255, s.logoOpacity),
-      );
+      for (final placement in placements) {
+        canvas.drawImageRect(
+          logo!,
+          Rect.fromLTWH(0, 0, logo!.width.toDouble(), logo!.height.toDouble()),
+          placement.logoRect,
+          Paint()
+            ..filterQuality = FilterQuality.high
+            ..isAntiAlias = true
+            ..color = Color.fromRGBO(255, 255, 255, s.logoOpacity),
+        );
+      }
     }
     canvas.restore();
   }

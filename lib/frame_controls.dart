@@ -403,6 +403,45 @@ class FrameControls extends StatelessWidget {
                   ),
               ],
             ),
+            if (s.position == FramePosition.sideMarks)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text(
+                  'شمال أعلى المنتصف قليلًا + يمين أسفل المنتصف قليلًا',
+                ),
+              )
+            else ...[
+              SwitchListTile(
+                key: const ValueKey('duplicate-logo'),
+                contentPadding: EdgeInsets.zero,
+                title: const Text('تكرار اللوجو'),
+                subtitle: const Text(
+                  'نسخة إضافية بنفس الحجم والشفافية والإعدادات',
+                ),
+                value: s.duplicateLogo,
+                onChanged: (v) => update(() => s.duplicateLogo = v),
+              ),
+              if (s.duplicateLogo) ...[
+                const Text('موقع النسخة الثانية'),
+                Wrap(
+                  key: const ValueKey('duplicate-logo-positions'),
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    for (final position in FramePosition.values.where(
+                      (p) => p != FramePosition.sideMarks,
+                    ))
+                      ChoiceChip(
+                        key: ValueKey('duplicate-position-${position.name}'),
+                        label: Text(framePositionNames[position.index]),
+                        selected: s.duplicatePosition == position,
+                        onSelected: (_) =>
+                            update(() => s.duplicatePosition = position),
+                      ),
+                  ],
+                ),
+              ],
+            ],
             slider(
               'حجم اللوجو في الفريم',
               s.logoWidth * 100,

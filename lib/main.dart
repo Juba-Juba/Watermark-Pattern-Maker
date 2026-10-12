@@ -908,7 +908,7 @@ class _EditorState extends State<Editor> {
               style: TextStyle(fontSize: 21, fontWeight: FontWeight.w800),
             ),
             Text(
-              'WEB • 1.7.0',
+              'WEB • 1.8.0',
               style: TextStyle(fontSize: 10, letterSpacing: 2),
             ),
           ],
