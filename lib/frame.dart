@@ -353,16 +353,16 @@ class FramePainter extends CustomPainter {
       }
     }
     cutout.close();
-    var band = Path.combine(
-      PathOperation.difference,
-      Path()..addRRect(
+    // Explicit even-odd holes avoid CanvasKit path-boolean winding differences.
+    final band = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRRect(
         RRect.fromRectAndRadius(
           outer,
           Radius.circular(variant == 0 ? layout.radius * .3 : 0),
         ),
-      ),
-      cutout,
-    );
+      )
+      ..addPath(cutout, Offset.zero);
     final flecks = Path();
     for (var i = 0; i < samples; i += 3) {
       final tangent = metric.getTangentForOffset(metric.length * i / samples)!;
@@ -372,7 +372,7 @@ class FramePainter extends CustomPainter {
       final radius = thickness * (.012 + random.nextDouble() * .045);
       flecks.addOval(Rect.fromCircle(center: point, radius: radius));
     }
-    band = Path.combine(PathOperation.difference, band, flecks);
+    band.addPath(flecks, Offset.zero);
     paint.style = PaintingStyle.fill;
     canvas.drawPath(band, paint);
     // Short bristles and grains extend inward from the rough edge. All geometry
